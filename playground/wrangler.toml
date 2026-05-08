@@ -1,0 +1,12 @@
+name = "framecore-cms-playground"
+compatibility_date = "2026-03-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "framecore-cms-playground"
+# database_id = "..."   # Set after `wrangler d1 create framecore-cms-playground`
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "framecore-cms-playground"

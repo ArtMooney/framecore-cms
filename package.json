@@ -1,0 +1,64 @@
+{
+    "name": "framecore-cms",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Reusable Nuxt layer providing a CMS admin UI and Cloudflare D1/R2-backed REST endpoints.",
+    "files": [
+        "app",
+        "server",
+        "nuxt.config.ts",
+        "tailwind.config.js",
+        "tsconfig.json"
+    ],
+    "exports": {
+        ".": {
+            "import": "./nuxt.config.ts"
+        },
+        "./tailwind.config.js": "./tailwind.config.js",
+        "./server/db/schema": "./server/db/schema.ts"
+    },
+    "scripts": {
+        "dev": "nuxt dev playground",
+        "build": "nuxt build playground",
+        "generate": "nuxt generate playground",
+        "preview": "nuxt preview playground",
+        "postinstall": "nuxt prepare playground",
+        "db:generate": "drizzle-kit generate --config=playground/drizzle.config.ts",
+        "db:migrate:local": "USE_LOCAL_DB=true drizzle-kit migrate --config=playground/drizzle.config.ts",
+        "db:migrate": "drizzle-kit migrate --config=playground/drizzle.config.ts",
+        "db:studio:local": "USE_LOCAL_DB=true drizzle-kit studio --config=playground/drizzle.config.ts",
+        "db:studio": "drizzle-kit studio --config=playground/drizzle.config.ts"
+    },
+    "dependencies": {
+        "@pinia/nuxt": "^0.11.3",
+        "@tailwindcss/vite": "^4.2.1",
+        "@vuepic/vue-datepicker": "^12.1.0",
+        "chart.js": "^4.5.1",
+        "date-fns": "^4.1.0",
+        "drizzle-orm": "^0.45.1",
+        "pinia": "^3.0.4",
+        "pinia-plugin-persistedstate": "^4.7.1",
+        "tailwindcss": "^4.2.1",
+        "vue-chartjs": "^5.3.3",
+        "vue-draggable-next": "^2.3.0"
+    },
+    "peerDependencies": {
+        "nuxt": "^4.0.0",
+        "vue": "^3.0.0",
+        "vue-router": "^4.0.0"
+    },
+    "devDependencies": {
+        "@cloudflare/workers-types": "^4.20260313.1",
+        "@iconify/json": "^2.2.450",
+        "better-sqlite3": "^12.8.0",
+        "drizzle-kit": "^0.31.9",
+        "nuxt": "^4.4.2",
+        "prettier": "^3.8.1",
+        "prettier-plugin-tailwindcss": "^0.7.2",
+        "unplugin-icons": "^23.0.1",
+        "vue": "latest",
+        "vue-router": "latest",
+        "wrangler": "^4.73.0"
+    }
+}
