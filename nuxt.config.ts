@@ -15,7 +15,11 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
   },
 
-  modules: ["@pinia/nuxt", "pinia-plugin-persistedstate/nuxt"],
+  modules: [
+    "unplugin-icons/nuxt",
+    "@pinia/nuxt",
+    "pinia-plugin-persistedstate/nuxt",
+  ],
 
   runtimeConfig: {
     // Basic-auth gate in front of /cms/* endpoints.
