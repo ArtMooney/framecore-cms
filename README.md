@@ -1,145 +1,146 @@
-# framecore-cms
+# Framecore CMS
 
-A reusable [Nuxt Layer](https://nuxt.com/docs/getting-started/layers) that
-ships a self-contained CMS admin UI plus the Nitro endpoints, Drizzle
-schema, and Tailwind styles needed to run it on Cloudflare D1 + R2.
+A Nuxt 4 module for Cloudflare D1 + R2. It includes `/admin`, the `/cms/*` API,
+login/password reset, configurable fields, file uploads, charts and CSV export.
+The CMS owns its styling; the host needs no CMS Tailwind config, icon plugin or
+image provider.
 
-The layer is consumed directly from GitHub — no npm publishing required.
+## Use in a site
 
----
+Install `framecore-cms` from a released Git tag, or link the sibling repository
+while developing:
 
-## Repo layout
-
-```
-framecore-cms/
-├─ app/                    # Layer — admin page, components, composables, utils
-├─ server/                 # Layer — /cms/* Nitro routes, db client, users schema
-├─ tailwind.config.js      # Layer — exports `cmsStyles` plugin (scoped to .cms-admin)
-├─ nuxt.config.ts          # Layer — modules + runtimeConfig defaults
-├─ playground/             # Local dev consumer (used by `npm run dev`)
-└─ package.json
+```sh
+npm install ../framecore-cms
 ```
 
-`playground/` is a real Nuxt project that `extends: [".."]`, i.e. it pulls in
-the layer the same way an external consumer would. Use it as the dev sandbox
-while iterating on the CMS.
-
----
-
-## Local development
-
-```bash
-npm install
-npm run dev          # boots the playground at http://localhost:3000
-```
-
-D1/R2 setup the first time:
-
-```bash
-cd playground
-npx wrangler d1 create framecore-cms-playground   # paste returned id into wrangler.toml
-npx wrangler r2 bucket create framecore-cms-playground
-npx wrangler d1 execute framecore-cms-playground --local --command="SELECT 1"
-cd ..
-npm run db:generate
-npm run db:migrate:local
-```
-
----
-
-## Using the layer in another project
-
-### 1. Extend the layer
+Enable the module:
 
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ["github:hskoglund/framecore-cms#v0.1.0"],
-})
+  modules: ["framecore-cms"],
+});
 ```
 
-Pin to a tag or commit SHA in production. For private repos, set
-`GIGET_AUTH=<github_token>` in your build environment (e.g. Cloudflare Pages
-env vars). Cloudflare Pages also needs `NODE_VERSION=20`.
-
-### 2. Cloudflare bindings
-
-The layer expects two bindings — names are fixed: `DB` (D1) and `FILES` (R2).
-
-```toml
-# wrangler.toml in your consumer project
-[[d1_databases]]
-binding = "DB"
-database_name = "your-db"
-database_id = "..."
-
-[[r2_buckets]]
-binding = "FILES"
-bucket_name = "your-bucket"
-```
-
-### 3. Drizzle schema
-
-Your `server/db/schema.ts` must re-export the layer's `users` table alongside
-your own tables:
+Create one server-only configuration file:
 
 ```ts
-export { users } from "framecore-cms/server/db/schema";
+// server/cms.config.ts
+import * as schema from "./db/schema";
+export { schema };
 
-import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
-
-export const projects = sqliteTable("projects", { /* … */ });
-```
-
-### 4. CMS configuration
-
-Describe the tables that should appear in the admin UI:
-
-```ts
-// server/db/cmsConfig.ts
 export const cmsTables = [
-  { id: "projects", name: "Projects", viewMode: "list", backupRef: null },
+  { id: "articles", name: "Articles", viewMode: "list" },
 ];
-
 export const fieldsConfig = {
-  projects: {
-    id:        { type: "integer", label: "",      required: true,  hidden: true  },
-    title:     { type: "text",    label: "Title", required: true,  hidden: false },
-    sortOrder: { type: "integer", label: "",      required: true,  hidden: true  },
-    createdAt: { type: "date",    label: "",      required: true,  hidden: true  },
-    updatedAt: { type: "date",    label: "",      required: true,  hidden: true  },
+  articles: {
+    id: { type: "integer", hidden: true },
+    title: { type: "text", label: "Title", required: true },
+    sortOrder: { type: "integer", hidden: true },
   },
 };
-
 export const graphConfig = {};
 export const staticContentTypes = {};
 ```
 
-### 5. Tailwind
+Each site defines its entire Drizzle SQLite schema and owns its migrations and
+Cloudflare bindings `DB` (D1) and `FILES` (R2). The CMS package defines no tables.
+Its only database input is the `schema` exported by the site's CMS configuration.
+`cmsTables[].id` and `fieldsConfig` use that schema's JavaScript keys.
 
-```js
-// tailwind.config.js in your consumer project
-import { cmsStyles } from "framecore-cms/tailwind.config.js";
+The built-in login expects a `schema.users` table with `id`, `email`, `password`
+and `resetId` fields. The `/cms/static` content endpoint expects
+`schema.static_content`; JSON editing uses `title` and `content`. These are
+JavaScript export/field names; each site chooses the SQL table and column names,
+constraints and extra fields. For example, `users` may map to an
+`admin_accounts` SQL table. The CMS never creates or migrates these tables.
 
-export default {
-  plugins: [cmsStyles],
-};
-```
+Each editable table needs an `id` primary key and a numeric `sortOrder` column.
+Provide field settings for every column; use `hidden: true` for system columns.
+Supported fields: text, textarea, integer, checkbox, date, dateRange, select,
+file, fileImg and json.
+Graph options must be JSON-compatible because they are sent to the admin through
+the metadata API; JavaScript callbacks are not supported there.
+For `json` content, `staticContentTypes` maps each row's title to its editable
+nested fields.
 
-The plugin only touches selectors scoped under `.cms-admin`, so it never
-leaks into your site's design.
+To keep an existing config path, set
+`cms: { config: "./server/db/cmsConfig.ts" }`. That file must also export `schema`.
+The module reserves `/admin` and `/cms/*`; remove local copies of those routes.
+The admin uses its own layout and sends `noindex, nofollow`.
 
-### 6. Environment variables
+## Environment
 
-```
-NUXT_USERNAME=<basic-auth user for /cms/*>
-NUXT_USERPASS=<basic-auth pass>
-NUXT_PUBLIC_USERNAME=<same, exposed to the client>
-NUXT_PUBLIC_USERPASS=<same, exposed to the client>
+Configure these per site (declare no extra runtime keys; the module adds them):
+
+```dotenv
+NUXT_USER_NAME=site-api-user
+NUXT_USER_PASS=site-api-password
+NUXT_PUBLIC_USER_NAME=site-api-user
+NUXT_PUBLIC_USER_PASS=site-api-password
+NUXT_PUBLIC_IMAGE_BASE_URL=https://files.example.com
+
+# Optional, for password reset emails:
 NUXT_MAILGUN_API_KEY=...
-NUXT_EMAIL_FROM=...
-NUXT_EMAIL_TO=...
-NUXT_UNSUBSCRIBE_TO=...
+NUXT_EMAIL_FROM=CMS <cms@example.com>
+NUXT_CMS_MAILGUN_DOMAIN=mg.example.com
+# Defaults to the EU Mailgun endpoint:
+NUXT_CMS_MAILGUN_BASE_URL=https://api.eu.mailgun.net
 ```
 
-The admin UI is then available at `/admin`.
+Existing sites that explicitly read `NUXT_USERNAME`, `NUXT_USERPASS`, etc. in
+`nuxt.config.ts` can keep doing so. Nuxt's automatic overrides use the
+underscore-separated names above.
+
+The current login protocol is preserved: a public Basic-auth API header plus
+an admin account in the `users` table. The Basic-auth values are visible to
+visitors and are not an admin secret. The login store persists the admin
+credentials, as in the original CMS. A session-based login would be a separate
+change.
+
+## Develop the CMS in a site
+
+Keep this repository next to the site that imports it. Install the CMS
+repository's dependencies and run its checks:
+
+```sh
+npm install
+npm test
+```
+
+In the consuming site, link the repository and start that site's dev server:
+
+```sh
+npm install ../framecore-cms
+npm run dev
+```
+
+Edit the shared code in this repository and verify it in the consuming site's
+`/admin`, using that site's schema, configuration and Cloudflare bindings.
+Restart the site's dev server after changing the module registration in
+`module.mjs`. Verify affected sites before releasing a shared update.
+
+Edit `styles/cms.css` for the CMS theme and base styles, then run this command
+in the CMS repository:
+
+```sh
+npm run build:css
+```
+
+This compiles Tailwind utilities and datepicker styles into `runtime/cms.css`,
+with every selector scoped to `.cms-admin` and separate CSS variable/animation
+names. Rebuild after changing styles or adding utility classes to components.
+Commit the generated CSS so Git installs work without a CSS build at the host.
+
+## Versions
+
+All shared code lives in this repository. Bump `package.json`, rebuild the CSS,
+run the tests and verify the consuming sites, then commit and tag the release. Consumers can install
+`github:ArtMooney/framecore-cms#v0.2.0` once that tag has been pushed. Pin a tag
+or commit for deployed sites. Each site updates the dependency and redeploys
+when it wants the new version. There is no npm publication requirement.
+
+The local `file:../framecore-cms` dependency used by Boråssajten requires both
+repositories side by side. Replace it with a pushed Git tag/commit before
+building in CI where only the site repository is checked out.

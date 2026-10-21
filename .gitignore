@@ -1,27 +1,12 @@
-# Nuxt dev/build outputs
+node_modules
+.nuxt
 .output
 .data
-.nuxt
-.nitro
+.wrangler
 .cache
-dist
-/.wrangler/
-*.sql
-
-# Node dependencies
-node_modules
-
-# Logs
-logs
 *.log
-
-# Misc
 .DS_Store
-.fleet
-.idea
-
-# Local env files
 .env
 .env.*
 !.env.example
-/playground/.wrangler/
+*.tgz
