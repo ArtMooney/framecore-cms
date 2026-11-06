@@ -9,11 +9,13 @@ import {
 import { checkLogin } from "./utils/check-login.js";
 import { verifyPassword } from "./utils/password.js";
 import { useDrizzle } from "../db.js";
-import { like } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { requirePost, startCmsSession } from "./utils/session.js";
 
 const { users } = schema;
 
 export default defineEventHandler(async (event) => {
+  requirePost(event);
   const config = useRuntimeConfig();
   const headers = getRequestHeaders(event);
   const body = await readBody(event);
@@ -25,7 +27,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (!body?.email || !body?.password) {
+  if (
+    typeof body?.email !== "string" ||
+    !body.email.trim() ||
+    typeof body?.password !== "string" ||
+    !body.password
+  ) {
     throw createError({
       statusCode: 400,
       statusMessage: "Missing email or password",
@@ -36,7 +43,7 @@ export default defineEventHandler(async (event) => {
   const user = await db
     .select()
     .from(users)
-    .where(like(users.email, body.email));
+    .where(sql`lower(${users.email}) = lower(${body.email.trim()})`);
 
   const passwordValid =
     user.length > 0 && (await verifyPassword(body.password, user[0].password));
@@ -47,6 +54,8 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Error logging in",
     });
   }
+
+  await startCmsSession(event, user[0]);
 
   return {
     success: true,

@@ -46,6 +46,7 @@
 import { requiredFields } from "../utils/requiredFields.js";
 import { emailValidator } from "../utils/emailValidator.js";
 import { $fetch } from "ofetch";
+import { apiErrorMessage } from "../utils/cmsApi.js";
 import { useRuntimeConfig } from "#imports";
 export default {
   name: "ResetPasswordPanel",
@@ -101,8 +102,7 @@ export default {
           this.loginEmail = "";
           this.clearErrorWhenClicked();
         } catch (err) {
-          this.statusMessage =
-            err.statusMessage || "Something went wrong. Please try again.";
+          this.statusMessage = apiErrorMessage(err);
           this.showStatusMessage = true;
           this.buttonText = savedText;
 

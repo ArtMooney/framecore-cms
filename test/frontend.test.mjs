@@ -82,7 +82,7 @@ beforeEach(() => {
       throw new Error(`Unexpected request: ${url}`);
     },
   });
-  useLoginStore().login("admin@example.test", "admin-password");
+  useLoginStore().$patch({ isLoggedIn: true, initialized: true });
 });
 
 after(() => {
@@ -188,7 +188,7 @@ test("all runtime Vue files compile with their CMS components explicitly importe
   }
 });
 
-test("CMS metadata loads once while table loading keeps the existing authentication contract", async () => {
+test("CMS metadata loads once using cookies without sending admin credentials", async () => {
   const store = useCmsStore();
   assert.equal(store.$id, "framecore-cms:content");
   assert.equal(useLoginStore().$id, "framecore-cms:login");
@@ -206,10 +206,8 @@ test("CMS metadata loads once while table loading keeps the existing authenticat
       options.headers.Authorization,
       `Basic ${btoa("site:public-key")}`,
     );
-    assert.deepEqual(options.body, {
-      email: "admin@example.test",
-      password: "admin-password",
-    });
+    assert.deepEqual(options.body, {});
+    assert.equal(options.credentials, "same-origin");
   }
   assert.deepEqual(store.graphConfig, fixture.metadata.graphConfig);
   assert.deepEqual(
@@ -393,6 +391,7 @@ test("failed metadata loading clears the loading state and can be retried", asyn
   await store.loadTables();
   assert.equal(store.loadingFlag, false);
   assert.equal(store.configLoaded, false);
+  assert.match(store.errorMessage, /try again/i);
   assert.equal(useLoginStore().isValid, true);
 
   fixture.respond = respond;
@@ -418,7 +417,7 @@ test("the loading indicator stays active while metadata is pending", async () =>
   assert.equal(store.loadingFlag, false);
 });
 
-test("an expired server session still clears stored credentials and reloads the page", async (t) => {
+test("an expired server session returns to login and explains why", async (t) => {
   t.mock.method(console, "log", () => {});
   fixture.respond = () => {
     throw Object.assign(new Error("Unauthorized"), { status: 401 });
@@ -426,9 +425,10 @@ test("an expired server session still clears stored credentials and reloads the 
   const store = useCmsStore();
   await store.loadTables();
   assert.equal(useLoginStore().isValid, false);
-  assert.equal(useLoginStore().email, null);
-  assert.equal(useLoginStore().password, null);
-  assert.equal(fixture.reloads, 1);
+  assert.equal(useLoginStore().email, undefined);
+  assert.equal(useLoginStore().password, undefined);
+  assert.match(useLoginStore().errorMessage, /session has expired/i);
+  assert.equal(fixture.reloads, 0);
   assert.equal(store.loadingFlag, false);
 });
 
@@ -552,4 +552,68 @@ test("the home control returns to the current site's origin including its port",
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;
   }
+});
+
+test("login keeps credentials out of state and restores the server session on reload", async () => {
+  const store = useLoginStore();
+  store.clear();
+  fixture.respond = (url) => {
+    if (url === "/cms/login" || url === "/cms/logout") return { success: true };
+    if (url === "/cms/session") return { authenticated: true };
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  await store.login("admin@example.test", "secret");
+  assert.deepEqual(fixture.requests[0].options.body, {
+    email: "admin@example.test",
+    password: "secret",
+  });
+  assert.equal(store.isValid, true);
+  assert.equal(JSON.stringify(store.$state).includes("secret"), false);
+  assert.equal("password" in store.$state, false);
+  store.clear();
+  await store.restore();
+  assert.equal(store.initialized, true);
+  assert.equal(store.isValid, true);
+  await store.logout();
+  assert.equal(store.isValid, false);
+  assert.deepEqual(
+    fixture.requests.map(({ url }) => url),
+    ["/cms/login", "/cms/session", "/cms/logout"],
+  );
+});
+
+test("failed logout does not claim the server session ended", async () => {
+  fixture.respond = () => {
+    throw new Error("Network unavailable");
+  };
+  await assert.rejects(useLoginStore().logout(), /Network unavailable/);
+  assert.equal(useLoginStore().isValid, true);
+});
+
+test("failed writes preserve edits and show an error while clearing busy flags", async () => {
+  const store = useCmsStore();
+  store.tableId = "products";
+  store.items = [{ id: 1, title: "Unsaved" }];
+  store.showItem = 0;
+  store.itemOpen = true;
+  store.editingItem = true;
+  fixture.respond = () => {
+    throw Object.assign(new Error("Internal details"), {
+      status: 500,
+      data: { message: "SQL secret details" },
+    });
+  };
+  assert.equal(await store.saveItem(0), false);
+  assert.equal(store.items[0].title, "Unsaved");
+  assert.equal(store.itemOpen, true);
+  assert.equal(store.editingItem, true);
+  assert.equal(store.saveFlag, false);
+  assert.match(store.errorMessage, /try again/i);
+  assert.doesNotMatch(store.errorMessage, /SQL/);
+  assert.equal(await store.archiveItems("archive"), false);
+  assert.equal(store.loadingFlag, false);
+  assert.equal(
+    fixture.requests.some(({ url }) => url === "/cms/delete-items"),
+    false,
+  );
 });

@@ -52,6 +52,7 @@ const fixture = {
   runtimeConfig: {
     userName: "public-site",
     userPass: "public-key",
+    cmsSessionPassword: "test-session-secret-with-at-least-32-characters",
     cmsMailgunDomain: "mg.example.test",
     cmsMailgunBaseUrl: "https://api.mailgun.test/",
   },
@@ -124,6 +125,7 @@ const bucket = {
 };
 const credentials = { email: "admin@example.test", password: "admin-password" };
 const routes = {};
+let adminCookie;
 
 before(async () => {
   sqlite.exec(`
@@ -154,11 +156,17 @@ before(async () => {
     "delete-item",
     "static",
     "login",
+    "session",
+    "logout",
+    "new-password",
   ]) {
     routes[name] = (
       await import(`../runtime/server/routes/${name}.js`)
     ).default;
   }
+  const login = await request("login", credentials, { cookie: "" });
+  assert.equal(login.status, 200);
+  adminCookie = sessionCookie(login);
 });
 
 after(() => {
@@ -167,48 +175,83 @@ after(() => {
   delete globalThis[fixtureKey];
 });
 
-async function request(name, body, authorized = true) {
+async function request(
+  name,
+  body,
+  {
+    authorized = true,
+    cookie = adminCookie,
+    headers = {},
+    method = body === undefined ? "GET" : "POST",
+    origin = "https://site.example.test",
+    env = {},
+  } = {},
+) {
   const app = new H3({ silent: true });
   app.all("/**", async (event) => {
-    event.context.cloudflare = { env: { DB: d1, FILES: bucket } };
+    event.context.cloudflare = { env: { DB: d1, FILES: bucket, ...env } };
     return routes[name](event);
   });
   const response = await app.fetch(
-    new Request(`https://site.example.test/cms/${name}`, {
-      method: body === undefined ? "GET" : "POST",
+    new Request(`${origin}/cms/${name}`, {
+      method,
       headers: {
         ...(authorized
           ? { Authorization: `Basic ${btoa("public-site:public-key")}` }
           : {}),
+        ...(cookie ? { Cookie: cookie } : {}),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...headers,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
-  return { status: response.status, body: await response.json() };
+  const raw = await response.text();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = raw;
+  }
+  return {
+    status: response.status,
+    body: data,
+    cookies: response.headers.getSetCookie(),
+    cacheControl: response.headers.get("cache-control"),
+  };
 }
 
-test("metadata uses host configuration and still requires admin authentication", async () => {
-  const tables = await request("tables", credentials);
+function sessionCookie(response) {
+  const cookie = response.cookies.find((value) =>
+    value.startsWith("framecore-cms-session="),
+  );
+  assert.ok(cookie, "response must contain the CMS session cookie");
+  return cookie.split(";", 1)[0];
+}
+
+test("metadata uses host configuration and requires the server session", async () => {
+  const tables = await request("tables", {});
   assert.equal(tables.status, 200);
   assert.deepEqual(tables.body, fixture.cmsTables);
 
-  const config = await request("config", credentials);
+  const config = await request("config", {});
   assert.equal(config.status, 200);
   assert.deepEqual(config.body, {
     graphConfig: fixture.graphConfig,
     staticContentTypes: fixture.staticContentTypes,
   });
   assert.equal(
-    (await request("config", { ...credentials, password: "wrong" })).status,
+    (await request("config", credentials, { cookie: "" })).status,
     401,
   );
-  assert.equal((await request("config", credentials, false)).status, 401);
+  assert.equal(
+    (await request("config", {}, { authorized: false })).status,
+    401,
+  );
 });
 
 test("CRUD and sorting work with a host table outside the original site schema", async () => {
   const fields = await request("fields", {
-    ...credentials,
     table_id: "products",
   });
   assert.equal(fields.status, 200);
@@ -218,14 +261,14 @@ test("CRUD and sorting work with a host table outside the original site schema",
   );
   assert.equal(fields.body[1].label, "Product");
 
-  const rows = await request("rows", { ...credentials, table_id: "products" });
+  const rows = await request("rows", { table_id: "products" });
   assert.equal(rows.status, 200);
   assert.deepEqual(
     rows.body.map((row) => row.name),
     ["First", "Second"],
   );
 
-  const base = { ...credentials, table_id: "products", schema: [] };
+  const base = { table_id: "products", schema: [] };
   const added = await request("add-item", {
     ...base,
     item: { name: "New", sortOrder: 3 },
@@ -247,17 +290,18 @@ test("CRUD and sorting work with a host table outside the original site schema",
     sqlite.prepare("SELECT COUNT(*) AS count FROM site_products").get().count,
     2,
   );
-  assert.equal(
-    (await request("rows", { ...credentials, table_id: "users" })).status,
-    400,
-  );
+  assert.equal((await request("rows", { table_id: "users" })).status, 400);
 });
 
 test("public static content and login retain their existing API contracts", async () => {
   const content = await request("static");
   assert.equal(content.status, 200);
   assert.deepEqual(content.body[0].content, { title: "Welcome" });
-  assert.equal((await request("static", undefined, false)).status, 401);
+  assert.equal(
+    (await request("static", undefined, { authorized: false, cookie: "" }))
+      .status,
+    401,
+  );
   assert.deepEqual((await request("login", credentials)).body, {
     success: true,
     data: { message: "Logged in successfully" },
@@ -333,7 +377,7 @@ test("bulk archive operations retain backupRef behavior and chunked writes", asy
     name: `Expired ${index + 1}`,
     sortOrder: index + 1,
   }));
-  const source = { ...credentials, table_id: archive.backupRef };
+  const source = { table_id: archive.backupRef };
   assert.equal((await request("add-items", { ...source, items })).status, 200);
   const sourceRows = (await request("rows", source)).body;
   const expired = sourceRows.filter((row) => row.name.startsWith("Expired"));
@@ -341,7 +385,7 @@ test("bulk archive operations retain backupRef behavior and chunked writes", asy
   // Bulk inserts deliberately discard IDs from the source table.
   assert.ok(expired.every((row) => row.id < 100));
 
-  const target = { ...credentials, table_id: archive.id };
+  const target = { table_id: archive.id };
   assert.equal(
     (await request("add-items", { ...target, items: expired })).status,
     200,
@@ -381,7 +425,6 @@ test("bulk archive operations retain backupRef behavior and chunked writes", asy
 
 test("nested content file updates preserve, replace and clean up stored files", async () => {
   const base = {
-    ...credentials,
     table_id: "static_content",
     schema: [{ name: "content", type: "json" }],
   };
@@ -444,4 +487,254 @@ test("nested content file updates preserve, replace and clean up stored files", 
       .get(created.body.id).count,
     0,
   );
+});
+
+test("login creates a private cookie and restores authentication without browser-stored credentials", async () => {
+  const loggedIn = await request("login", credentials, { cookie: "" });
+  assert.equal(loggedIn.status, 200);
+  const cookie = sessionCookie(loggedIn);
+  const setCookie = loggedIn.cookies.find((value) =>
+    value.startsWith("framecore-cms-session="),
+  );
+  assert.match(setCookie, /; HttpOnly/i);
+  assert.match(setCookie, /; Secure/i);
+  assert.match(setCookie, /; SameSite=Strict/i);
+  assert.match(setCookie, /; Path=\/cms(?:;|$)/i);
+  assert.match(setCookie, /; Max-Age=2592000(?:;|$)/i);
+  assert.ok(!cookie.includes(credentials.password));
+  assert.ok(!cookie.includes(credentials.email));
+
+  const restored = await request("session", undefined, {
+    cookie,
+    authorized: false,
+  });
+  assert.deepEqual(restored.body, { authenticated: true });
+  assert.equal((await request("tables", {}, { cookie })).status, 200);
+  assert.equal(
+    (await request("tables", credentials, { cookie: "" })).status,
+    401,
+  );
+  assert.deepEqual((await request("session", undefined, { cookie: "" })).body, {
+    authenticated: false,
+  });
+});
+
+test("login matches an exact email address, preserving case-insensitive sign-in", async () => {
+  assert.equal(
+    (
+      await request(
+        "login",
+        { ...credentials, email: " ADMIN@EXAMPLE.TEST " },
+        { cookie: "" },
+      )
+    ).status,
+    200,
+  );
+  for (const email of ["%", "_dmin@example.test", "admin%@example.test"]) {
+    assert.equal(
+      (await request("login", { ...credentials, email }, { cookie: "" }))
+        .status,
+      401,
+    );
+  }
+  assert.equal(
+    (await request("login", { email: [], password: "password" })).status,
+    400,
+  );
+  assert.equal(
+    (await request("login", credentials, { authorized: false })).status,
+    401,
+  );
+});
+
+test("login and logout reject other methods and cross-site requests cannot use a valid session", async () => {
+  for (const name of ["login", "logout"]) {
+    assert.equal((await request(name, undefined)).status, 405);
+  }
+  for (const headers of [
+    { Origin: "https://another.example.test" },
+    { "Sec-Fetch-Site": "cross-site" },
+  ]) {
+    assert.equal(
+      (await request("login", credentials, { headers })).status,
+      403,
+    );
+    assert.equal((await request("logout", {}, { headers })).status, 403);
+    assert.equal((await request("config", {}, { headers })).status, 403);
+    assert.equal(
+      (await request("session", undefined, { headers })).status,
+      403,
+    );
+  }
+  assert.equal(
+    (
+      await request(
+        "config",
+        {},
+        { headers: { Origin: "https://site.example.test" } },
+      )
+    ).status,
+    200,
+  );
+});
+
+test("forged and altered cookies cannot authenticate", async () => {
+  const modified = `${adminCookie.slice(0, -1)}${adminCookie.endsWith("a") ? "b" : "a"}`;
+  const forged = `framecore-cms-session=${encodeURIComponent(JSON.stringify({ userId: 1, expiresAt: Date.now() + 60000 }))}`;
+  for (const cookie of [modified, forged]) {
+    assert.equal((await request("config", {}, { cookie })).status, 401);
+    assert.deepEqual((await request("session", undefined, { cookie })).body, {
+      authenticated: false,
+    });
+  }
+});
+
+test("session expiry is checked by the server", async (context) => {
+  const future = Date.now() + 31 * 24 * 60 * 60 * 1000;
+  context.mock.method(Date, "now", () => future);
+  assert.equal((await request("config", {})).status, 401);
+  assert.deepEqual((await request("session")).body, { authenticated: false });
+});
+
+test("logout clears the browser session and removes the former password cookie", async () => {
+  const oldCookie = `framecore-cms:login=${encodeURIComponent(JSON.stringify(credentials))}`;
+  const response = await request(
+    "logout",
+    {},
+    { cookie: `${adminCookie}; ${oldCookie}` },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { success: true });
+  const cleared = response.cookies.find((value) =>
+    value.startsWith("framecore-cms-session="),
+  );
+  assert.match(cleared, /; Max-Age=0(?:;|$)/i);
+  assert.ok(
+    response.cookies.some(
+      (value) =>
+        value.startsWith("framecore-cms:login=") &&
+        /; Max-Age=0(?:;|$)/i.test(value),
+    ),
+  );
+  assert.deepEqual(
+    (await request("session", undefined, { cookie: sessionCookie(response) }))
+      .body,
+    { authenticated: false },
+  );
+});
+
+test("password reset invalidates existing sessions immediately", async () => {
+  const previous = sqlite
+    .prepare("SELECT password, reset_id FROM admin_accounts WHERE id = 1")
+    .get();
+  const { createResetToken } =
+    await import("../runtime/server/routes/utils/reset-token.js");
+  const validation = createResetToken();
+  sqlite
+    .prepare("UPDATE admin_accounts SET reset_id = ? WHERE id = 1")
+    .run(validation);
+  try {
+    assert.equal(
+      (
+        await request(
+          "new-password",
+          { validation, password: "updated-password" },
+          { cookie: "" },
+        )
+      ).status,
+      200,
+    );
+    assert.deepEqual((await request("session")).body, { authenticated: false });
+    assert.equal((await request("config", {})).status, 401);
+    assert.equal(
+      (await request("login", credentials, { cookie: "" })).status,
+      401,
+    );
+    assert.equal(
+      (
+        await request(
+          "login",
+          { ...credentials, password: "updated-password" },
+          { cookie: "" },
+        )
+      ).status,
+      200,
+    );
+  } finally {
+    sqlite
+      .prepare(
+        "UPDATE admin_accounts SET password = ?, reset_id = ? WHERE id = 1",
+      )
+      .run(previous.password, previous.reset_id);
+  }
+});
+
+test("deleting an account invalidates its existing session", async () => {
+  const user = sqlite
+    .prepare("SELECT * FROM admin_accounts WHERE id = 1")
+    .get();
+  sqlite.prepare("DELETE FROM admin_accounts WHERE id = 1").run();
+  try {
+    assert.equal((await request("config", {})).status, 401);
+    assert.deepEqual((await request("session")).body, { authenticated: false });
+  } finally {
+    sqlite
+      .prepare("INSERT INTO admin_accounts VALUES (?, ?, ?, ?)")
+      .run(user.id, user.email, user.password, user.reset_id);
+  }
+});
+
+test("session login requires a configured secret and local HTTP development remains possible", async () => {
+  const previous = fixture.runtimeConfig.cmsSessionPassword;
+  fixture.runtimeConfig.cmsSessionPassword = "too-short";
+  try {
+    assert.equal(
+      (await request("login", credentials, { cookie: "" })).status,
+      500,
+    );
+  } finally {
+    fixture.runtimeConfig.cmsSessionPassword = previous;
+  }
+  const loggedIn = await request("login", credentials, {
+    cookie: "",
+    origin: "http://localhost:3000",
+  });
+  assert.equal(loggedIn.status, 200);
+  const cookie = loggedIn.cookies.find((value) =>
+    value.startsWith("framecore-cms-session="),
+  );
+  assert.match(cookie, /; HttpOnly/i);
+  assert.ok(!/; Secure(?:;|$)/i.test(cookie));
+});
+
+test("Cloudflare runtime secrets work without a build-time secret and rotating them rejects old cookies", async () => {
+  const previous = fixture.runtimeConfig.cmsSessionPassword;
+  fixture.runtimeConfig.cmsSessionPassword = "";
+  const env = {
+    NUXT_CMS_SESSION_PASSWORD:
+      "cloudflare-runtime-only-secret-32-characters-long",
+  };
+  try {
+    const loggedIn = await request("login", credentials, { cookie: "", env });
+    assert.equal(loggedIn.status, 200);
+    assert.equal(loggedIn.cacheControl, "no-store");
+    const cookie = sessionCookie(loggedIn);
+    const restored = await request("session", undefined, { cookie, env });
+    assert.deepEqual(restored.body, { authenticated: true });
+    assert.equal(restored.cacheControl, "no-store");
+    assert.deepEqual(
+      (
+        await request("session", undefined, {
+          cookie,
+          env: {
+            NUXT_CMS_SESSION_PASSWORD:
+              "a-different-cloudflare-runtime-secret-32-characters",
+          },
+        })
+      ).body,
+      { authenticated: false },
+    );
+  } finally {
+    fixture.runtimeConfig.cmsSessionPassword = previous;
+  }
 });

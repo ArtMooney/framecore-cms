@@ -34,7 +34,6 @@
     "drizzle-orm": "^0.45.4",
     "ofetch": "^1.5.1",
     "pinia": "^4.1.0",
-    "pinia-plugin-persistedstate": "^4.7.1",
     "tailwindcss": "^4.3.5",
     "vue-chartjs": "^5.3.4",
     "vue-draggable-next": "^2.3.0"

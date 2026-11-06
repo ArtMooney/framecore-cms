@@ -203,14 +203,15 @@ its hosting environment instead. See [Nuxt runtime config](https://nuxt.com/docs
 
 **Server-side variables**
 
-| Variable                    | When needed                      | Purpose / default                                                 |
-| --------------------------- | -------------------------------- | ----------------------------------------------------------------- |
-| `NUXT_MAILGUN_API_KEY`      | Password emails                  | Mailgun API key, available only on the server.                    |
-| `NUXT_EMAIL_FROM`           | Password emails                  | Sender address for password reset and change-confirmation emails. |
-| `NUXT_CMS_MAILGUN_DOMAIN`   | Password emails                  | Sending domain configured in Mailgun.                             |
-| `NUXT_CMS_MAILGUN_BASE_URL` | A different Mailgun API endpoint | Optional; defaults to `https://api.eu.mailgun.net`.               |
-| `NUXT_USER_NAME`            | Basic-auth API configuration     | Server-side API username. Must match `NUXT_PUBLIC_USER_NAME`.     |
-| `NUXT_USER_PASS`            | Basic-auth API configuration     | Server-side API password. Must match `NUXT_PUBLIC_USER_PASS`.     |
+| Variable                    | When needed                      | Purpose / default                                                                        |
+| --------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| `NUXT_MAILGUN_API_KEY`      | Password emails                  | Mailgun API key, available only on the server.                                           |
+| `NUXT_EMAIL_FROM`           | Password emails                  | Sender address for password reset and change-confirmation emails.                        |
+| `NUXT_CMS_MAILGUN_DOMAIN`   | Password emails                  | Sending domain configured in Mailgun.                                                    |
+| `NUXT_CMS_MAILGUN_BASE_URL` | A different Mailgun API endpoint | Optional; defaults to `https://api.eu.mailgun.net`.                                      |
+| `NUXT_USER_NAME`            | Basic-auth API configuration     | Server-side API username. Must match `NUXT_PUBLIC_USER_NAME`.                            |
+| `NUXT_USER_PASS`            | Basic-auth API configuration     | Server-side API password. Must match `NUXT_PUBLIC_USER_PASS`.                            |
+| `NUXT_CMS_SESSION_PASSWORD` | Admin login                      | Random server-only secret of at least 32 characters used to encrypt CMS session cookies. |
 
 **Public variables**
 
@@ -224,7 +225,18 @@ Set all four Basic-auth variables, with matching server/browser values. They
 are visible to visitors through the public pair and are not an admin secret.
 Admin login separately checks an account in the site's `users` table; admin
 email addresses and passwords are not configured through these variables.
-The login store persists admin credentials, as in the original CMS.
+The administrator password is sent only when logging in. The CMS then uses an
+encrypted HttpOnly cookie, scoped to `/cms`, with a server-enforced 30-day
+lifetime. JavaScript cannot read this cookie. Password changes invalidate the
+account's existing sessions. Logout removes the browser's session cookie.
+Production uses HTTPS; local HTTP is supported on localhost and loopback IPs.
+
+Generate `NUXT_CMS_SESSION_PASSWORD` once with a cryptographically random source,
+for example `openssl rand -hex 32`. Keep it stable across deployments and all
+instances of the same site. Use a separate secret for each site/environment;
+rotating it signs everyone out. It must never be a public variable.
+On Cloudflare, the CMS reads this secret from the request's environment binding,
+so it can be configured at runtime without including it in the build.
 
 The Mailgun key, sender and domain are required when using password emails.
 Regular login and content editing do not need Mailgun configuration.
@@ -239,6 +251,8 @@ Example for the **site's** `.env`, using placeholder values:
 # Server-side API values.
 NUXT_USER_NAME=site-api-user
 NUXT_USER_PASS=site-api-password
+# Required for admin login; replace with a generated secret, never commit it:
+NUXT_CMS_SESSION_PASSWORD=replace-with-a-random-secret-of-at-least-32-characters
 # Required when using password emails:
 NUXT_MAILGUN_API_KEY=your-mailgun-api-key
 NUXT_EMAIL_FROM=CMS <cms@example.com>
@@ -257,6 +271,30 @@ Existing sites such as Boråssajten explicitly map `NUXT_USERNAME`,
 `NUXT_USERPASS`, `NUXT_PUBLIC_USERNAME` and `NUXT_PUBLIC_USERPASS` in their
 `nuxt.config.ts`. Keep those mappings when retaining the legacy names; new
 sites can use the standard underscore-separated names above.
+
+### Upgrading from password persistence
+
+Set `NUXT_CMS_SESSION_PASSWORD` in the site's local environment and its production
+and preview runtime secrets, update the pinned CMS dependency, then rebuild and
+deploy the site. No database migration or changes to `server/cms.config.ts` are
+needed. Existing administrators must log in again; the old persisted login cookie
+is removed automatically. The CMS no longer installs `pinia-plugin-persistedstate`.
+
+The CMS UI handles the new protocol itself. Custom clients of protected `/cms/*`
+endpoints must log in through `POST /cms/login` and keep the returned session
+cookie instead of sending administrator credentials with each request. Keep the
+existing Basic-auth header. `GET /cms/session` checks the session and
+`POST /cms/logout` clears its cookie. These requests must use the site's own
+origin. The public site's `/cms/static` API keeps its existing Basic-auth contract.
+
+Password reset links now expire after 30 minutes and work once. Outstanding
+links issued by older CMS versions must be requested again. The CMS generates
+reset links using the request's site origin and `/admin`; configure a reverse
+proxy to preserve the site's request URL if one is used.
+
+Tables with `backupRef` are archived automatically when selected, as before.
+The CMS now moves expired date-range rows through `POST /cms/archive-items`
+in a single D1 transaction, so a failed copy cannot delete the source records.
 
 ### Cloudflare bindings
 

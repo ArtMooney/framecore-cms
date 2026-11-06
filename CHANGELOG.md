@@ -5,7 +5,28 @@ integration instructions.
 
 ## Unreleased
 
+### Fixed
+
+- Password reset tokens require an exact match, expire after 30 minutes and
+  can only be consumed once. Unknown email addresses return the same generic
+  response; reset links use the site's own origin and the stored email address.
+- Automatic archiving copies and deletes rows in one D1 transaction. Failed
+  writes preserve all source rows, and concurrent requests do not duplicate them.
+- Admin request failures now appear in the UI, preserve unsaved edits and clear
+  busy indicators. Expired sessions return to login with an explanation.
+  Session errors use the existing message box below the login form.
+- The initial session spinner keeps its circular shape and only appears when
+  the session check takes longer than 200 milliseconds, avoiding a brief flash.
+
 ### Changed
+
+- Replaced persisted administrator passwords with encrypted HttpOnly session
+  cookies and server-enforced expiry. Requires a random server-only
+  `NUXT_CMS_SESSION_PASSWORD` of at least 32 characters in every site environment.
+  No schema migration is needed. Existing users must log in again, and older
+  password-reset links must be requested again.
+- The CMS no longer installs `pinia-plugin-persistedstate`. Custom admin API
+  clients must use the login session cookie; public content APIs are unchanged.
 
 - Updated all direct dependencies to their latest stable versions. Nuxt 4.6.4
   and Node.js 22.22.3+, 24.15.0+ or 26+ are now required.

@@ -35,7 +35,7 @@ export default {
   },
 
   async mounted() {
-    await this.cmsStore.loadTables();
+    if (!(await this.cmsStore.loadTables())) return;
     await this.loadSchema();
   },
 
@@ -51,41 +51,24 @@ export default {
       this.cmsStore.selectedMonth = "-";
       this.cmsStore.sortOrder = "asc";
 
-      await this.cmsStore.loadFields();
+      if (!(await this.cmsStore.loadFields())) return;
       const dateField =
         this.cmsStore.allDateFields.find(
           (field) => field.name === this.cmsStore.graphDateField,
         ) ?? this.cmsStore.allDateFields[0];
       this.cmsStore.sortField = dateField?.name ?? "sortOrder";
       this.cmsStore.loadingFlag = true;
-      await this.backupReferencedTable(table);
+      if (
+        this.cmsStore.backupRef &&
+        !(await this.cmsStore.archiveItems(table.id))
+      ) {
+        this.cmsStore.loadingFlag = false;
+        return;
+      }
       await this.cmsStore.loadRows(
         "asc",
         table.viewMode === "graph" ? this.cmsStore.sortField : "sortOrder",
       );
-    },
-
-    async backupReferencedTable(table) {
-      if (!this.cmsStore.backupRef) return;
-
-      this.cmsStore.tableId = this.cmsStore.backupRef;
-      await this.cmsStore.loadRows("asc", "sortOrder");
-      this.cmsStore.loadingFlag = true;
-
-      const backupItems = this.cmsStore.items.filter(this.isExpiredItem);
-      this.cmsStore.tableId = table.id;
-      this.cmsStore.items = backupItems;
-      await this.cmsStore.addItems();
-
-      this.cmsStore.tableId = this.cmsStore.backupRef;
-      await this.cmsStore.deleteItems();
-
-      this.cmsStore.tableId = table.id;
-      this.cmsStore.loadingFlag = false;
-    },
-
-    isExpiredItem(item) {
-      return item?.date?.[1] && new Date(item.date[1]) < new Date();
     },
   },
 

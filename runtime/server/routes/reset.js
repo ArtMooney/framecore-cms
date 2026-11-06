@@ -3,19 +3,23 @@ import {
   defineEventHandler,
   createError,
   getRequestHeaders,
+  getRequestURL,
   readBody,
   useRuntimeConfig,
 } from "nuxt/server";
 import { checkLogin } from "./utils/check-login.js";
-import { randomUUID } from "crypto";
 import { sendEmail } from "./utils/send-email.js";
 import { messageEmailReset } from "./content/message-email-reset.js";
+import { createResetToken } from "./utils/reset-token.js";
 import { useDrizzle } from "../db.js";
-import { eq, like } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 const { users } = schema;
 
 export default defineEventHandler(async (event) => {
+  if (event.req.method !== "POST") {
+    throw createError({ statusCode: 405, statusMessage: "Method Not Allowed" });
+  }
   const config = useRuntimeConfig();
   const headers = getRequestHeaders(event);
   const body = await readBody(event);
@@ -27,10 +31,10 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (!body?.email || !body?.pageuri) {
+  if (typeof body?.email !== "string" || !body.email.trim()) {
     throw createError({
       statusCode: 400,
-      statusMessage: "Missing email or pageuri",
+      statusMessage: "Missing email",
     });
   }
 
@@ -38,13 +42,13 @@ export default defineEventHandler(async (event) => {
   const user = await db
     .select()
     .from(users)
-    .where(like(users.email, body.email));
+    .where(eq(sql`lower(${users.email})`, body.email.trim().toLowerCase()));
 
-  if (!user) {
+  if (user.length === 0) {
     return "ok"; // User not found, return same as if ok is a security measure
   }
 
-  const resetId = randomUUID();
+  const resetId = createResetToken();
 
   try {
     await db
@@ -58,11 +62,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const sendToEmail = await sendEmail(
+  const pageUrl = new URL("/admin", getRequestURL(event)).href;
+  await sendEmail(
     config.emailFrom,
-    body.email,
+    user[0].email,
     "Change password for your account on Simple CMS",
-    await messageEmailReset(body.pageuri, resetId),
+    await messageEmailReset(pageUrl, resetId),
     config.mailgunApiKey,
   );
 

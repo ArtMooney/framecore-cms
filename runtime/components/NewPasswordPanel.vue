@@ -48,14 +48,19 @@
     <div
       v-if="showStatusMessage"
       class="mt-12 w-full bg-orange-400/70 p-4 text-base text-black sm:w-2/3 md:w-1/2"
-      v-html="statusMessage"
-    ></div>
+    >
+      {{ statusMessage }}
+      <a v-if="isChanged" href="/admin" class="underline"
+        >Click here to login.</a
+      >
+    </div>
   </div>
 </template>
 
 <script>
 import { requiredFields } from "../utils/requiredFields.js";
 import { $fetch } from "ofetch";
+import { apiErrorMessage } from "../utils/cmsApi.js";
 import { useRuntimeConfig } from "#imports";
 export default {
   name: "NewPasswordPanel",
@@ -113,8 +118,7 @@ export default {
             }),
           });
 
-          this.statusMessage =
-            "Your password has been successfully changed. <a href='/admin' class='underline'>Click here to login.</a>";
+          this.statusMessage = "Your password has been successfully changed.";
           this.showStatusMessage = true;
           this.isChanged = true;
           this.buttonText = savedText;
@@ -123,8 +127,7 @@ export default {
 
           this.clearErrorWhenClicked();
         } catch (err) {
-          this.statusMessage =
-            err.statusMessage || "Something went wrong. Please try again.";
+          this.statusMessage = apiErrorMessage(err);
           this.showStatusMessage = true;
           this.isChanged = false;
           this.buttonText = savedText;

@@ -7,12 +7,16 @@ import {
   useRuntimeConfig,
 } from "nuxt/server";
 import { checkLogin } from "./utils/check-login.js";
+import { isValidResetToken } from "./utils/reset-token.js";
 import { useDrizzle } from "../db.js";
-import { like } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 const { users } = schema;
 
 export default defineEventHandler(async (event) => {
+  if (event.req.method !== "POST") {
+    throw createError({ statusCode: 405, statusMessage: "Method Not Allowed" });
+  }
   const config = useRuntimeConfig();
   const headers = getRequestHeaders(event);
   const body = await readBody(event);
@@ -24,10 +28,17 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (!body?.validation) {
+  if (typeof body?.validation !== "string" || !body.validation) {
     throw createError({
       statusCode: 400,
       statusMessage: "Missing a validation code",
+    });
+  }
+
+  if (!isValidResetToken(body.validation)) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Invalid or expired validation code",
     });
   }
 
@@ -35,7 +46,7 @@ export default defineEventHandler(async (event) => {
   const user = await db
     .select()
     .from(users)
-    .where(like(users.resetId, body.validation));
+    .where(eq(users.resetId, body.validation));
 
   if (!user || user.length === 0) {
     throw createError({

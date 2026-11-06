@@ -1,17 +1,25 @@
 import { schema } from "#framecore-cms/config";
-import { verifyPassword } from "./password.js";
 import { useDrizzle } from "../../db.js";
-import { like } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import {
+  getCmsSession,
+  passwordVersion,
+  requireSameOrigin,
+} from "./session.js";
 
 const { users } = schema;
 
-export async function checkAuthentication(event, email, password) {
-  if (!email || !password) return false;
-
+export async function checkAuthentication(event) {
+  requireSameOrigin(event);
+  const session = await getCmsSession(event);
+  const { userId, expiresAt, passwordVersion: version } = session.data;
+  if (userId === undefined || !expiresAt || Date.now() >= expiresAt)
+    return false;
   const db = useDrizzle(event.context.cloudflare.env.DB);
-  const user = await db.select().from(users).where(like(users.email, email));
-
-  if (!user || user.length === 0) return false;
-
-  return await verifyPassword(password, user[0].password);
+  const user = await db.select().from(users).where(eq(users.id, userId)).get();
+  if (!user || (await passwordVersion(user.password)) !== version) {
+    await session.clear();
+    return false;
+  }
+  return true;
 }

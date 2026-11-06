@@ -44,6 +44,7 @@ import IconFamiconsCogSharp from "./icons/IconFamiconsCogSharp.vue";
 
 <script>
 import { useLoginStore } from "./stores/loginStore.js";
+import { useCmsStore } from "./stores/cmsStore.js";
 
 export default {
   name: "Navbar",
@@ -66,9 +67,13 @@ export default {
       window.location.href = window.location.origin;
     },
 
-    logOut() {
-      this.loginStore.logout();
-      location.reload();
+    async logOut() {
+      try {
+        await this.loginStore.logout();
+        location.reload();
+      } catch (error) {
+        useCmsStore().reportError(error);
+      }
     },
   },
 };

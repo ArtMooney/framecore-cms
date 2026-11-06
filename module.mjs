@@ -45,14 +45,6 @@ export default defineNuxtModule({
     if (!hasNuxtModule("@pinia/nuxt", nuxt) && !hasNuxtModule("pinia", nuxt)) {
       await installModule(fileURLToPath(import.meta.resolve("@pinia/nuxt")));
     }
-    if (
-      !hasNuxtModule("pinia-plugin-persistedstate/nuxt", nuxt) &&
-      !hasNuxtModule("pinia-plugin-persistedstate", nuxt)
-    ) {
-      await installModule(
-        fileURLToPath(import.meta.resolve("pinia-plugin-persistedstate/nuxt")),
-      );
-    }
 
     // Linked checkouts have their own dependencies. Share the host's Vue and
     // Pinia instances, just as a normal hoisted package installation does.
@@ -72,6 +64,7 @@ export default defineNuxtModule({
       "mailgunApiKey",
       "emailFrom",
       "cmsMailgunDomain",
+      "cmsSessionPassword",
     ]) {
       config[key] ??= "";
     }

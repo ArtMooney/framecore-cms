@@ -1,5 +1,4 @@
-import { $fetch } from "ofetch";
-import { useRuntimeConfig } from "#imports";
+import { cmsRequest, apiErrorMessage } from "../../utils/cmsApi.js";
 import { defineStore } from "pinia";
 import { useLoginStore } from "./loginStore.js";
 import { months } from "../lib/months.js";
@@ -26,6 +25,7 @@ export const useCmsStore = defineStore("framecore-cms:content", {
     editingItem: false,
     editingNewItem: false,
     inputError: false,
+    errorMessage: "",
     formRefs: {},
     selectedYear: "-",
     selectedMonth: "-",
@@ -71,24 +71,41 @@ export const useCmsStore = defineStore("framecore-cms:content", {
   },
 
   actions: {
-    async loadTables() {
+    reportError(error) {
+      this.errorMessage = apiErrorMessage(error);
+      if ((error.statusCode ?? error.status) === 401) {
+        const loginStore = useLoginStore();
+        loginStore.clear();
+        loginStore.errorMessage =
+          "Your session has expired. Please log in again.";
+      }
+    },
+
+    async archiveItems(tableId) {
+      this.errorMessage = "";
       this.loadingFlag = true;
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
+      try {
+        await cmsRequest("/cms/archive-items", {
+          method: "POST",
+          body: { table_id: tableId },
+        });
+        return true;
+      } catch (error) {
+        this.reportError(error);
+        return false;
+      } finally {
+        this.loadingFlag = false;
+      }
+    },
+    async loadTables() {
+      this.errorMessage = "";
+      this.loadingFlag = true;
 
       try {
         if (!this.configLoaded) {
-          const metadata = await $fetch("/cms/config", {
+          const metadata = await cmsRequest("/cms/config", {
             method: "POST",
-            headers: {
-              Authorization:
-                "Basic " +
-                btoa(config.public.userName + ":" + config.public.userPass),
-            },
-            body: {
-              email: loginStore.email,
-              password: loginStore.password,
-            },
+            body: {},
           });
 
           this.graphConfig = metadata.graphConfig ?? {};
@@ -96,50 +113,35 @@ export const useCmsStore = defineStore("framecore-cms:content", {
           this.configLoaded = true;
         }
 
-        const tables = await $fetch("/cms/tables", {
+        const tables = await cmsRequest("/cms/tables", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
-          body: {
-            email: loginStore.email,
-            password: loginStore.password,
-          },
+          body: {},
         });
         this.tables = tables.filter(
           (table) =>
             table.viewMode !== "graph" || this.graphConfig[table.id]?.length,
         );
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.loadingFlag = false;
       }
     },
 
     async loadFields() {
+      this.schema = [];
+      this.items = [];
+      this.formRefs = {};
+      this.itemOpen = false;
+      this.errorMessage = "";
       this.loadingFlag = true;
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
 
       try {
-        this.schema = await $fetch("/cms/fields", {
+        this.schema = await cmsRequest("/cms/fields", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
           body: {
-            email: loginStore.email,
-            password: loginStore.password,
             table_id: this.tableId,
           },
         });
@@ -149,13 +151,10 @@ export const useCmsStore = defineStore("framecore-cms:content", {
         this.showItem = 0;
         this.itemOpen = false;
         this.inputError = false;
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.loadingFlag = false;
       }
@@ -164,33 +163,22 @@ export const useCmsStore = defineStore("framecore-cms:content", {
     async loadRows(sortOrder, fieldName) {
       if (!this.hasSchema) return;
 
+      this.errorMessage = "";
       this.loadingFlag = true;
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
 
       try {
-        this.items = await $fetch("/cms/rows", {
+        this.items = await cmsRequest("/cms/rows", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
           body: {
-            email: loginStore.email,
-            password: loginStore.password,
             table_id: this.tableId,
             field_name: fieldName,
             sort_order: sortOrder,
           },
         });
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.selectedTableIsStatic = this.tableId === "static_content";
         this.loadingFlag = false;
@@ -217,8 +205,6 @@ export const useCmsStore = defineStore("framecore-cms:content", {
     async saveItem(index) {
       if (index !== this.showItem) return;
 
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
       const item = this.items[index];
       const form = this.formRefs[index];
 
@@ -227,21 +213,15 @@ export const useCmsStore = defineStore("framecore-cms:content", {
         return;
       }
 
+      this.errorMessage = "";
       this.saveFlag = true;
 
       try {
-        const res = await $fetch(
+        const res = await cmsRequest(
           this.editingNewItem ? "/cms/add-item" : "/cms/save-item",
           {
             method: "POST",
-            headers: {
-              Authorization:
-                "Basic " +
-                btoa(config.public.userName + ":" + config.public.userPass),
-            },
             body: {
-              email: loginStore.email,
-              password: loginStore.password,
               item: this.items[index],
               schema: this.schema,
               table_id: this.tableId,
@@ -256,22 +236,17 @@ export const useCmsStore = defineStore("framecore-cms:content", {
         this.itemOpen = false;
         this.editingItem = false;
         this.editingNewItem = false;
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.saveFlag = false;
       }
     },
 
     async saveSortOrder() {
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
-
+      this.errorMessage = "";
       this.saveFlag = true;
       this.saveAllFlag = true;
       const items = JSON.parse(JSON.stringify(this.items));
@@ -281,16 +256,9 @@ export const useCmsStore = defineStore("framecore-cms:content", {
       }
 
       try {
-        await $fetch("/cms/save-sort-order", {
+        await cmsRequest("/cms/save-sort-order", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
           body: {
-            email: loginStore.email,
-            password: loginStore.password,
             items: items,
             schema: this.schema,
             table_id: this.tableId,
@@ -298,13 +266,10 @@ export const useCmsStore = defineStore("framecore-cms:content", {
         });
 
         this.itemOpen = false;
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.saveFlag = false;
         this.saveAllFlag = false;
@@ -312,35 +277,23 @@ export const useCmsStore = defineStore("framecore-cms:content", {
     },
 
     async addItems() {
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
-
+      this.errorMessage = "";
       this.saveFlag = true;
       this.saveAllFlag = true;
 
       try {
-        await $fetch("/cms/add-items", {
+        await cmsRequest("/cms/add-items", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
           body: {
-            email: loginStore.email,
-            password: loginStore.password,
             items: this.items,
             schema: this.schema,
             table_id: this.tableId,
           },
         });
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.itemOpen = false;
         this.saveFlag = false;
@@ -349,35 +302,23 @@ export const useCmsStore = defineStore("framecore-cms:content", {
     },
 
     async deleteItems() {
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
-
+      this.errorMessage = "";
       this.saveFlag = true;
       this.saveAllFlag = true;
 
       try {
-        await $fetch("/cms/delete-items", {
+        await cmsRequest("/cms/delete-items", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
           body: {
-            email: loginStore.email,
-            password: loginStore.password,
             items: this.items,
             schema: this.schema,
             table_id: this.tableId,
           },
         });
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.itemOpen = false;
         this.saveFlag = false;
@@ -386,21 +327,13 @@ export const useCmsStore = defineStore("framecore-cms:content", {
     },
 
     async deleteItem(index) {
-      const loginStore = useLoginStore();
-      const config = useRuntimeConfig();
+      this.errorMessage = "";
       this.saveFlag = true;
 
       try {
-        await $fetch("/cms/delete-item", {
+        await cmsRequest("/cms/delete-item", {
           method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              btoa(config.public.userName + ":" + config.public.userPass),
-          },
           body: {
-            email: loginStore.email,
-            password: loginStore.password,
             item: this.items[index],
             schema: this.schema,
             table_id: this.tableId,
@@ -412,13 +345,10 @@ export const useCmsStore = defineStore("framecore-cms:content", {
         this.items = items;
         this.itemOpen = false;
         this.editingItem = false;
+        return true;
       } catch (err) {
-        if (err.status === 401) {
-          loginStore.logout();
-          location.reload();
-        }
-
-        console.log(err);
+        this.reportError(err);
+        return false;
       } finally {
         this.saveFlag = false;
       }

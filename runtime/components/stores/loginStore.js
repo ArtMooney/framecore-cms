@@ -1,40 +1,55 @@
 import { defineStore } from "pinia";
-
-const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
+import { cmsRequest, apiErrorMessage } from "../../utils/cmsApi.js";
 
 export const useLoginStore = defineStore("framecore-cms:login", {
   state: () => ({
     isLoggedIn: false,
-    email: null,
-    password: null,
-    expiresAt: null,
+    initialized: false,
+    errorMessage: "",
   }),
 
   getters: {
     isValid() {
-      if (this.isLoggedIn && this.expiresAt && Date.now() >= this.expiresAt) {
-        return false;
-      }
-
       return this.isLoggedIn;
     },
   },
 
   actions: {
-    login(email, password) {
-      this.isLoggedIn = true;
-      this.email = email;
-      this.password = password;
-      this.expiresAt = Date.now() + THIRTY_DAYS;
+    async restore() {
+      try {
+        const session = await cmsRequest("/cms/session");
+        this.isLoggedIn = session.authenticated;
+        this.errorMessage = "";
+      } catch (error) {
+        this.isLoggedIn = false;
+        this.errorMessage = apiErrorMessage(
+          error,
+          "Could not check your session. Please try logging in.",
+        );
+      } finally {
+        this.initialized = true;
+      }
     },
 
-    logout() {
+    async login(email, password) {
+      await cmsRequest("/cms/login", {
+        method: "POST",
+        body: { email, password },
+      });
+      this.isLoggedIn = true;
+      this.initialized = true;
+      this.errorMessage = "";
+    },
+
+    async logout() {
+      await cmsRequest("/cms/logout", { method: "POST" });
+      this.clear();
+    },
+
+    clear() {
       this.isLoggedIn = false;
-      this.email = null;
-      this.password = null;
-      this.expiresAt = null;
+      this.initialized = true;
+      this.errorMessage = "";
     },
   },
-
-  persist: true,
 });

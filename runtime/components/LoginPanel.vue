@@ -45,6 +45,7 @@
 
     <div
       v-if="showStatusMessage"
+      role="alert"
       class="mt-12 w-full bg-orange-400/70 p-4 text-base text-black sm:w-2/3 md:w-1/2"
     >
       {{ statusMessage }}
@@ -55,19 +56,14 @@
 <script>
 import { requiredFields } from "../utils/requiredFields.js";
 import { emailValidator } from "../utils/emailValidator.js";
-import { $fetch } from "ofetch";
-import { useRuntimeConfig } from "#imports";
+import { apiErrorMessage } from "../utils/cmsApi.js";
 import { useLoginStore } from "./stores/loginStore.js";
 
 export default {
   name: "LoginPanel",
 
   data() {
-    const config = useRuntimeConfig();
-
     return {
-      userName: config.public.userName,
-      userPass: config.public.userPass,
       loginEmail: "",
       loginPassword: "",
       showStatusMessage: false,
@@ -80,6 +76,14 @@ export default {
     loginStore() {
       return useLoginStore();
     },
+  },
+
+  mounted() {
+    if (!this.loginStore.errorMessage) return;
+    this.statusMessage = this.loginStore.errorMessage;
+    this.showStatusMessage = true;
+    this.loginStore.errorMessage = "";
+    this.clearErrorWhenClicked();
   },
 
   methods: {
@@ -100,24 +104,12 @@ export default {
         this.buttonText = event.target.dataset.wait;
 
         try {
-          await $fetch("/cms/login", {
-            method: "POST",
-            headers: {
-              Authorization:
-                "Basic " + btoa(this.userName + ":" + this.userPass),
-            },
-            body: JSON.stringify({
-              email: this.loginEmail,
-              password: this.loginPassword,
-            }),
-          });
-
-          this.loginStore.login(this.loginEmail, this.loginPassword);
+          await this.loginStore.login(this.loginEmail, this.loginPassword);
+          this.loginPassword = "";
           this.showStatusMessage = false;
           this.buttonText = savedText;
         } catch (err) {
-          this.statusMessage =
-            err.statusMessage || "Something went wrong. Please try again.";
+          this.statusMessage = apiErrorMessage(err);
           this.showStatusMessage = true;
           this.buttonText = savedText;
 
