@@ -9,14 +9,36 @@ To match the site's heading and body fonts, see [Site fonts](#site-fonts-optiona
 
 ## Use in a site
 
-Install `framecore-cms` from a released Git tag, or link the sibling repository
-while developing:
+Choose a versioned Git installation or a local checkout. Run the installation
+command in the consuming site's directory.
+
+**From GitHub**, use a pinned tag for deployment and CI, once the tag has been
+created and pushed:
+
+```sh
+npm install "github:ArtMooney/framecore-cms#v0.2.0"
+```
+
+The site can then be built without a local CMS checkout. To update later, run
+the same command with the new release tag.
+
+**From a local checkout**, keep the CMS repository next to the site. Run
+`npm install` in the CMS repository first, then run this in the site:
 
 ```sh
 npm install ../framecore-cms
 ```
 
-Enable the module:
+This saves `file:../framecore-cms` as the dependency. CMS source and style changes
+are processed by the site's dev server. See [Develop the CMS in a site](#develop-the-cms-in-a-site)
+for the full development workflow.
+
+**To switch between local and Git installations**, run the other installation
+command in the site and restart its dev server. The command updates
+`package.json` and `package-lock.json`; commit both when selecting a released
+version for the site.
+
+Enable the module in either case:
 
 ```ts
 // nuxt.config.ts
