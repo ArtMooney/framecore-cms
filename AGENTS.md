@@ -29,5 +29,8 @@ changes through the sites that import this module.
 - Run `npm test` after relevant changes. Verify behavior and builds in the
   affected consuming sites using their own configuration and schemas.
 - Preserve existing database and API behavior during extraction work.
-- Release by bumping the package version and creating a matching tag after
-  the changes have been committed. Consumers pin the pushed tag or commit.
+- Record user-facing changes under `Unreleased` in `CHANGELOG.md`.
+- Prepare a release by updating the package version and moving the changelog
+  entries to a section with the matching version and actual release date.
+  Commit the release changes before creating a matching tag. Consumers pin the
+  pushed tag or commit.

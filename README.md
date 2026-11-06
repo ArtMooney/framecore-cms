@@ -227,6 +227,10 @@ omitted. The datepicker uses its standard `dp-` classes and stylesheet.
 
 ## Versions
 
+Record changes under `Unreleased` in [CHANGELOG.md](./CHANGELOG.md). When
+preparing a release, move those entries to a section with the version number
+and actual release date, then keep `Unreleased` for upcoming changes.
+
 All shared code lives in this repository. Bump `package.json`, run the tests
 and verify the consuming sites, then commit and tag the release. Consumers can install
 `github:ArtMooney/framecore-cms#v0.2.0` once that tag has been pushed. Pin a tag
