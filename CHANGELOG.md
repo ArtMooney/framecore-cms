@@ -5,6 +5,12 @@ integration instructions.
 
 ## Unreleased
 
+### Changed
+
+- Expanded the environment reference with per-site configuration, required and
+  optional variables, matching Basic-auth values and Cloudflare binding requirements.
+  Server-side variables are listed first, followed by a separate public section.
+
 ## 0.2.0 - 2026-11-06
 
 ### Added

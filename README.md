@@ -186,32 +186,87 @@ inheritance does not read Tailwind's separate `heading` and `body` config keys.
 
 ## Environment
 
-Configure these per site (declare no extra runtime keys; the module adds them):
+Configure all values in the **consuming site**: use that site's `.env` locally
+and its hosting environment variables in production. The CMS repository does
+not need its own `.env` file when used as a module. The module declares the
+runtime config keys, so new sites can use the variable names below without
+adding them to `nuxt.config.ts`.
+
+Nuxt reads `.env` during development and builds; a built production server uses
+its hosting environment instead. See [Nuxt runtime config](https://nuxt.com/docs/4.x/guide/going-further/runtime-config#environment-variables).
+
+### Environment variables
+
+**Server-side variables**
+
+| Variable                    | When needed                      | Purpose / default                                                 |
+| --------------------------- | -------------------------------- | ----------------------------------------------------------------- |
+| `NUXT_MAILGUN_API_KEY`      | Password emails                  | Mailgun API key, available only on the server.                    |
+| `NUXT_EMAIL_FROM`           | Password emails                  | Sender address for password reset and change-confirmation emails. |
+| `NUXT_CMS_MAILGUN_DOMAIN`   | Password emails                  | Sending domain configured in Mailgun.                             |
+| `NUXT_CMS_MAILGUN_BASE_URL` | A different Mailgun API endpoint | Optional; defaults to `https://api.eu.mailgun.net`.               |
+| `NUXT_USER_NAME`            | Basic-auth API configuration     | Server-side API username. Must match `NUXT_PUBLIC_USER_NAME`.     |
+| `NUXT_USER_PASS`            | Basic-auth API configuration     | Server-side API password. Must match `NUXT_PUBLIC_USER_PASS`.     |
+
+**Public variables**
+
+| Variable                     | When needed                       | Purpose / default                                                    |
+| ---------------------------- | --------------------------------- | -------------------------------------------------------------------- |
+| `NUXT_PUBLIC_USER_NAME`      | Basic-auth API configuration      | Username sent by the browser with CMS API requests.                  |
+| `NUXT_PUBLIC_USER_PASS`      | Basic-auth API configuration      | Password sent by the browser with CMS API requests.                  |
+| `NUXT_PUBLIC_IMAGE_BASE_URL` | Images served from another origin | Base URL used for CMS image previews. Defaults to the site's origin. |
+
+Set all four Basic-auth variables, with matching server/browser values. They
+are visible to visitors through the public pair and are not an admin secret.
+Admin login separately checks an account in the site's `users` table; admin
+email addresses and passwords are not configured through these variables.
+The login store persists admin credentials, as in the original CMS.
+
+The Mailgun key, sender and domain are required when using password emails.
+Regular login and content editing do not need Mailgun configuration.
+
+Image preview URLs use `<NUXT_PUBLIC_IMAGE_BASE_URL>/cms-files/<filename>`.
+If the base URL is omitted, the site must serve those files at
+`/cms-files/<filename>` on its own origin.
+
+Example for the **site's** `.env`, using placeholder values:
 
 ```dotenv
+# Server-side API values.
 NUXT_USER_NAME=site-api-user
 NUXT_USER_PASS=site-api-password
-NUXT_PUBLIC_USER_NAME=site-api-user
-NUXT_PUBLIC_USER_PASS=site-api-password
-NUXT_PUBLIC_IMAGE_BASE_URL=https://files.example.com
-
-# Optional, for password reset emails:
-NUXT_MAILGUN_API_KEY=...
+# Required when using password emails:
+NUXT_MAILGUN_API_KEY=your-mailgun-api-key
 NUXT_EMAIL_FROM=CMS <cms@example.com>
 NUXT_CMS_MAILGUN_DOMAIN=mg.example.com
-# Defaults to the EU Mailgun endpoint:
+# Optional override; this is already the default:
 NUXT_CMS_MAILGUN_BASE_URL=https://api.eu.mailgun.net
+
+# Public API values must match the server-side pair.
+NUXT_PUBLIC_USER_NAME=site-api-user
+NUXT_PUBLIC_USER_PASS=site-api-password
+# Optional: image preview origin.
+NUXT_PUBLIC_IMAGE_BASE_URL=https://files.example.com
 ```
 
-Existing sites that explicitly read `NUXT_USERNAME`, `NUXT_USERPASS`, etc. in
-`nuxt.config.ts` can keep doing so. Nuxt's automatic overrides use the
-underscore-separated names above.
+Existing sites such as Boråssajten explicitly map `NUXT_USERNAME`,
+`NUXT_USERPASS`, `NUXT_PUBLIC_USERNAME` and `NUXT_PUBLIC_USERPASS` in their
+`nuxt.config.ts`. Keep those mappings when retaining the legacy names; new
+sites can use the standard underscore-separated names above.
 
-The current login protocol is preserved: a public Basic-auth API header plus
-an admin account in the `users` table. The Basic-auth values are visible to
-visitors and are not an admin secret. The login store persists the admin
-credentials, as in the original CMS. A session-based login would be a separate
-change.
+### Cloudflare bindings
+
+Configure these in the consuming site's Cloudflare project for each environment:
+
+| Binding | Resource    | Used for                                             |
+| ------- | ----------- | ---------------------------------------------------- |
+| `DB`    | D1 database | All CMS queries, including admin login.              |
+| `FILES` | R2 bucket   | Content creation, saving, deletion and file uploads. |
+
+These are resource bindings, not `.env` API keys. The current single-item
+create, save and delete handlers require `FILES`, even for items without files.
+The CMS accesses D1 through `DB`; Cloudflare account IDs and API tokens used by
+site-specific migration or deployment tools are not CMS runtime requirements.
 
 ## Develop the CMS in a site
 

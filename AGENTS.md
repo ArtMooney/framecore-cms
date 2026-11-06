@@ -14,6 +14,10 @@ changes through the sites that import this module.
 - Keep internal imports relative and Nuxt/Vue/H3 imports explicit. Published
   package files cannot depend on a host's auto-imports or folder layout.
 - D1/R2 binding names are `DB` and `FILES`. Keep this scope simple.
+- Keep the README's environment-variable and binding reference in sync with the
+  module's runtime config and handlers. Values belong to the consuming site;
+  use placeholders in documentation. List server-side variables first and public
+  variables last, separated by a blank line or a separate table.
 - Edit `tailwind.config.js` for the CMS theme and base styles. `runtime/cms.css`
   loads the config and sources; the module connects Tailwind to the host's Vite
   build. Use normal Tailwind utility classes. Keep the utility generation and
