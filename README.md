@@ -25,7 +25,31 @@ export default defineNuxtConfig({
 });
 ```
 
-Create one server-only configuration file:
+## Database schema and CMS configuration
+
+Keep all table definitions in the consuming site's database schema, including
+`users` and `static_content`. Use `server/cms.config.ts` to configure the editor:
+which tables can be edited, field settings, graphs and content templates.
+It imports the schema; it does not define tables.
+
+A typical site keeps these files together:
+
+```text
+server/
+  db/
+    schema.ts       # All of the site's Drizzle table definitions
+  cms.config.ts     # Imports the schema and configures the CMS
+drizzle.config.ts   # Migration configuration for server/db/schema.ts
+migrations/         # Database migrations owned by the site
+```
+
+The site's database client and migration tool use the same schema entry point.
+For example, the site's `drizzle.config.ts` points to
+`schema: "./server/db/schema.ts"`. This keeps database code independent of CMS
+editor settings. If table definitions are later split into several files,
+re-export them from `server/db/schema.ts` to keep one schema entry point.
+
+Create the server-only CMS configuration file:
 
 ```ts
 // server/cms.config.ts
@@ -46,10 +70,10 @@ export const graphConfig = {};
 export const staticContentTypes = {};
 ```
 
-Each site defines its entire Drizzle SQLite schema and owns its migrations and
-Cloudflare bindings `DB` (D1) and `FILES` (R2). The CMS package defines no tables.
-Its only database input is the `schema` exported by the site's CMS configuration.
-`cmsTables[].id` and `fieldsConfig` use that schema's JavaScript keys.
+The CMS uses the `schema` export and the site's Cloudflare bindings `DB` (D1)
+and `FILES` (R2). `cmsTables[].id` and `fieldsConfig` use the schema's JavaScript
+keys. Exporting the full schema does not make every table editable: `cmsTables`
+controls which tables the editor exposes.
 
 The built-in login expects a `schema.users` table with `id`, `email`, `password`
 and `resetId` fields. The `/cms/static` content endpoint expects
