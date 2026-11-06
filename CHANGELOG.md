@@ -5,6 +5,8 @@ integration instructions.
 
 ## Unreleased
 
+## 0.3.1 - 2026-11-06
+
 ### Fixed
 
 - Cloudflare HTTPS deployments use the original Worker request URL for origin
