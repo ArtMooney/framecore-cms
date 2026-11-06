@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
-import { createApp, defineEventHandler, toWebHandler } from "h3";
+import { H3 } from "h3";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 const fixtureKey = Symbol.for("framecore-cms.backend-test");
@@ -63,7 +63,7 @@ const fixtureSource = `const fixture = globalThis[Symbol.for("framecore-cms.back
 const sources = {
   "#framecore-cms/config": `${fixtureSource}
     export const { schema, cmsTables, fieldsConfig, graphConfig, staticContentTypes } = fixture;`,
-  "nitropack/runtime": `${fixtureSource}
+  "nuxt/internal/server-runtime-config": `${fixtureSource}
     export const useRuntimeConfig = () => fixture.runtimeConfig;`,
   ofetch: `${fixtureSource}
     export const $fetch = async (url, options) => {
@@ -168,14 +168,12 @@ after(() => {
 });
 
 async function request(name, body, authorized = true) {
-  const app = createApp({ onError: () => {} });
-  app.use(
-    defineEventHandler(async (event) => {
-      event.context.cloudflare = { env: { DB: d1, FILES: bucket } };
-      return routes[name](event);
-    }),
-  );
-  const response = await toWebHandler(app)(
+  const app = new H3({ silent: true });
+  app.all("/**", async (event) => {
+    event.context.cloudflare = { env: { DB: d1, FILES: bucket } };
+    return routes[name](event);
+  });
+  const response = await app.fetch(
     new Request(`https://site.example.test/cms/${name}`, {
       method: body === undefined ? "GET" : "POST",
       headers: {

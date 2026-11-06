@@ -1,6 +1,10 @@
 import { schema } from "#framecore-cms/config";
-import { defineEventHandler, createError, getHeaders } from "h3";
-import { useRuntimeConfig } from "nitropack/runtime";
+import {
+  defineEventHandler,
+  createError,
+  getRequestHeaders,
+  useRuntimeConfig,
+} from "nuxt/server";
 import { checkLogin } from "./utils/check-login.js";
 import { useDrizzle } from "../db.js";
 
@@ -8,7 +12,7 @@ const { static_content } = schema;
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
-  const headers = getHeaders(event);
+  const headers = getRequestHeaders(event);
 
   if (!(await checkLogin(headers, config.userName, config.userPass))) {
     throw createError({

@@ -4,7 +4,7 @@
   "type": "module",
   "description": "A self-contained Nuxt CMS module with its own styling and Cloudflare D1/R2 backend.",
   "engines": {
-    "node": ">=22.19.0"
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
   },
   "exports": {
     ".": {
@@ -25,32 +25,31 @@
     "format": "prettier --write . --ignore-path .gitignore"
   },
   "dependencies": {
-    "@nuxt/kit": "^4.5.2",
-    "@pinia/nuxt": "^1.0.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@nuxt/kit": "^4.6.4",
+    "@pinia/nuxt": "^1.0.3",
+    "@tailwindcss/vite": "^4.3.5",
     "@vuepic/vue-datepicker": "^14.0.0",
-    "chart.js": "^4.5.1",
+    "chart.js": "^4.6.1",
     "date-fns": "^4.4.0",
-    "drizzle-orm": "^0.45.2",
-    "h3": "^1.15.11",
+    "drizzle-orm": "^0.45.4",
     "ofetch": "^1.5.1",
-    "pinia": "^4.0.2",
+    "pinia": "^4.1.0",
     "pinia-plugin-persistedstate": "^4.7.1",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.5",
     "vue-chartjs": "^5.3.4",
     "vue-draggable-next": "^2.3.0"
   },
   "peerDependencies": {
-    "nuxt": "^4.5.2",
-    "nitropack": "^2.13.4",
-    "vue": "^3.5.41"
+    "nuxt": "^4.6.4",
+    "vue": "^3.5.45"
   },
   "devDependencies": {
-    "@tailwindcss/node": "^4.3.3",
-    "nuxt": "^4.5.2",
-    "postcss": "^8.5.26",
-    "prettier": "^3.9.6",
+    "@tailwindcss/node": "^4.3.5",
+    "h3": "^2.0.8",
+    "nuxt": "^4.6.4",
+    "postcss": "^8.5.32",
+    "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "vue": "^3.5.41"
+    "vue": "^3.5.45"
   }
 }

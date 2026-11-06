@@ -9,6 +9,10 @@ To match the site's heading and body fonts, see [Site fonts](#site-fonts-optiona
 
 ## Use in a site
 
+Requires Nuxt 4.6.4 or newer in the 4.x series and Node.js 22.22.3+, 24.15.0+
+or 26+. The CMS uses `nuxt/server` so server utilities come from the site's
+configured server builder rather than a separate CMS copy of H3 or Nitro.
+
 Choose a versioned Git installation or a local checkout. Run the installation
 command in the consuming site's directory.
 

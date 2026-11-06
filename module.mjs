@@ -16,7 +16,7 @@ export default defineNuxtModule({
   meta: {
     name: "framecore-cms",
     configKey: "cms",
-    compatibility: { nuxt: "^4.0.0" },
+    compatibility: { nuxt: "^4.6.4" },
   },
   defaults: { config: "./server/cms.config.ts" },
   async setup(options, nuxt) {

@@ -7,6 +7,10 @@ integration instructions.
 
 ### Changed
 
+- Updated all direct dependencies to their latest stable versions. Nuxt 4.6.4
+  and Node.js 22.22.3+, 24.15.0+ or 26+ are now required.
+- Server utilities now come from `nuxt/server`, removing the CMS's runtime H3
+  dependency and Nitro peer dependency. H3 2 is used only for API tests.
 - Expanded the environment reference with per-site configuration, required and
   optional variables, matching Basic-auth values and Cloudflare binding requirements.
   Server-side variables are listed first, followed by a separate public section.

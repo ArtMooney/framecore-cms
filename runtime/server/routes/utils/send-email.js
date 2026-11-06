@@ -1,5 +1,5 @@
 import { $fetch } from "ofetch";
-import { useRuntimeConfig } from "nitropack/runtime";
+import { useRuntimeConfig } from "nuxt/server";
 
 export async function sendEmail(from, to, subject, message, apiKey) {
   const config = useRuntimeConfig();
