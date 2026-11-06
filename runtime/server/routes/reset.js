@@ -3,7 +3,6 @@ import {
   defineEventHandler,
   createError,
   getRequestHeaders,
-  getRequestURL,
   readBody,
   useRuntimeConfig,
 } from "nuxt/server";
@@ -11,6 +10,7 @@ import { checkLogin } from "./utils/check-login.js";
 import { sendEmail } from "./utils/send-email.js";
 import { messageEmailReset } from "./content/message-email-reset.js";
 import { createResetToken } from "./utils/reset-token.js";
+import { getCmsRequestURL } from "./utils/request.js";
 import { useDrizzle } from "../db.js";
 import { eq, sql } from "drizzle-orm";
 
@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const pageUrl = new URL("/admin", getRequestURL(event)).href;
+  const pageUrl = new URL("/admin", getCmsRequestURL(event)).href;
   await sendEmail(
     config.emailFrom,
     user[0].email,

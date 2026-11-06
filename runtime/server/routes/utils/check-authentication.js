@@ -1,11 +1,8 @@
 import { schema } from "#framecore-cms/config";
 import { useDrizzle } from "../../db.js";
 import { eq } from "drizzle-orm";
-import {
-  getCmsSession,
-  passwordVersion,
-  requireSameOrigin,
-} from "./session.js";
+import { getCmsSession, passwordVersion } from "./session.js";
+import { requireSameOrigin } from "./request.js";
 
 const { users } = schema;
 

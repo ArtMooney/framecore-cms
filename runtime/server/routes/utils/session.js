@@ -2,34 +2,13 @@ import {
   createError,
   deleteCookie,
   getCookie,
-  getRequestHeader,
-  getRequestURL,
   useRuntimeConfig,
   useSession,
 } from "nuxt/server";
+import { getCmsRequestURL } from "./request.js";
 
 const SESSION_NAME = "framecore-cms-session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
-
-export function requireSameOrigin(event) {
-  const origin = getRequestHeader(event, "origin");
-  if (
-    getRequestHeader(event, "sec-fetch-site") === "cross-site" ||
-    (origin && origin !== getRequestURL(event).origin)
-  ) {
-    throw createError({
-      statusCode: 403,
-      statusMessage: "Invalid request origin",
-    });
-  }
-}
-
-export function requirePost(event) {
-  if (event.req.method !== "POST") {
-    throw createError({ statusCode: 405, statusMessage: "Method not allowed" });
-  }
-  requireSameOrigin(event);
-}
 
 export async function passwordVersion(passwordHash) {
   const digest = await crypto.subtle.digest(
@@ -60,7 +39,7 @@ export async function getCmsSession(event) {
   if (getCookie(event, "framecore-cms:login") !== undefined) {
     deleteCookie(event, "framecore-cms:login", { path: "/" });
   }
-  const url = getRequestURL(event);
+  const url = getCmsRequestURL(event);
   const localHttp =
     url.protocol === "http:" &&
     ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);

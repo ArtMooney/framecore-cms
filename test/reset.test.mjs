@@ -117,21 +117,31 @@ after(() => {
 async function request(
   name,
   body,
-  { method = "POST", authorized = true } = {},
+  {
+    method = "POST",
+    authorized = true,
+    origin = "https://site.example.test",
+    cloudflareUrl,
+    headers = {},
+  } = {},
 ) {
   const app = new H3({ silent: true });
   app.all("/**", async (event) => {
-    event.context.cloudflare = { env: { DB: d1 } };
+    event.context.cloudflare = {
+      env: { DB: d1 },
+      ...(cloudflareUrl ? { request: new Request(cloudflareUrl) } : {}),
+    };
     return routes[name](event);
   });
   const response = await app.fetch(
-    new Request(`https://site.example.test/cms/${name}`, {
+    new Request(`${origin}/cms/${name}`, {
       method,
       headers: {
         ...(authorized
           ? { Authorization: `Basic ${btoa("public-site:public-key")}` }
           : {}),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...headers,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -293,4 +303,34 @@ test("a failed notification does not report a saved password change as failed", 
     ),
     true,
   );
+});
+
+test("reset links keep Cloudflare's external HTTPS origin despite internal HTTP and forged forwarding headers", async () => {
+  const response = await request(
+    "reset",
+    {
+      email: "admin@example.test",
+      pageuri: "https://client.example/steal-token",
+    },
+    {
+      origin: "http://localhost:3000",
+      cloudflareUrl: "https://site.example.test/cms/reset",
+      headers: {
+        "X-Forwarded-Host": "attacker.example",
+        "X-Forwarded-Proto": "http",
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(fixture.sentEmails.length, 1);
+  const token = sqlite
+    .prepare("SELECT reset_id FROM admin_accounts")
+    .get().reset_id;
+  const message = fixture.sentEmails[0].options.body.get("text");
+  assert.ok(
+    message.includes(`https://site.example.test/admin?validation=${token}`),
+  );
+  assert.ok(!message.includes("localhost"));
+  assert.ok(!message.includes("attacker.example"));
+  assert.ok(!message.includes("client.example"));
 });

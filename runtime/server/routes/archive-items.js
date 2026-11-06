@@ -10,7 +10,7 @@ import { and, eq, getTableColumns, is, or, SQL, sql } from "drizzle-orm";
 import { useDrizzle } from "../db.js";
 import { checkAuthentication } from "./utils/check-authentication.js";
 import { checkLogin } from "./utils/check-login.js";
-import { requirePost } from "./utils/session.js";
+import { requirePost } from "./utils/request.js";
 
 export default defineEventHandler(async (event) => {
   requirePost(event);

@@ -5,6 +5,13 @@ integration instructions.
 
 ## Unreleased
 
+### Fixed
+
+- Cloudflare HTTPS deployments use the original Worker request URL for origin
+  validation, secure cookies and password-reset links. Same-site login no
+  longer fails when the server adapter reconstructs an HTTP request. Cross-site
+  requests remain blocked and forwarded host/protocol headers are not trusted.
+
 ## 0.3.0 - 2026-11-06
 
 ### Fixed

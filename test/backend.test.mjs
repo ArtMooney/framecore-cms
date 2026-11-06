@@ -184,12 +184,16 @@ async function request(
     headers = {},
     method = body === undefined ? "GET" : "POST",
     origin = "https://site.example.test",
+    cloudflareUrl,
     env = {},
   } = {},
 ) {
   const app = new H3({ silent: true });
   app.all("/**", async (event) => {
-    event.context.cloudflare = { env: { DB: d1, FILES: bucket, ...env } };
+    event.context.cloudflare = {
+      env: { DB: d1, FILES: bucket, ...env },
+      ...(cloudflareUrl ? { request: new Request(cloudflareUrl) } : {}),
+    };
     return routes[name](event);
   });
   const response = await app.fetch(
@@ -737,4 +741,138 @@ test("Cloudflare runtime secrets work without a build-time secret and rotating t
   } finally {
     fixture.runtimeConfig.cmsSessionPassword = previous;
   }
+});
+
+test("Cloudflare HTTPS origin survives an internal HTTP adapter throughout the session flow", async () => {
+  const origin = "http://localhost:3000";
+  const externalOrigin = "https://site.example.test";
+  const headers = { Origin: externalOrigin, "Sec-Fetch-Site": "same-origin" };
+  const options = (name, cookie = "") => ({
+    origin,
+    cloudflareUrl: `${externalOrigin}/cms/${name}`,
+    headers,
+    cookie,
+  });
+  const loggedIn = await request("login", credentials, options("login"));
+  assert.equal(loggedIn.status, 200);
+  const cookie = sessionCookie(loggedIn);
+  const setCookie = loggedIn.cookies.find((value) =>
+    value.startsWith("framecore-cms-session="),
+  );
+  assert.match(setCookie, /; Secure(?:;|$)/i);
+  assert.match(setCookie, /; HttpOnly(?:;|$)/i);
+  assert.deepEqual(
+    (await request("session", undefined, options("session", cookie))).body,
+    { authenticated: true },
+  );
+  const config = await request("config", {}, options("config", cookie));
+  assert.equal(config.status, 200);
+  assert.deepEqual(config.body.graphConfig, fixture.graphConfig);
+  const logout = await request("logout", {}, options("logout", cookie));
+  assert.equal(logout.status, 200);
+  assert.match(
+    logout.cookies.find((value) => value.startsWith("framecore-cms-session=")),
+    /; Max-Age=0(?:;|$)/i,
+  );
+  assert.deepEqual(
+    (
+      await request(
+        "session",
+        undefined,
+        options("session", sessionCookie(logout)),
+      )
+    ).body,
+    { authenticated: false },
+  );
+});
+
+test("Cloudflare trusted origin rejects spoofed forwarding headers and other browser origins", async () => {
+  const origin = "http://localhost:3000";
+  const externalOrigin = "https://site.example.test";
+  for (const headers of [
+    {
+      Origin: "https://attacker.example",
+      "X-Forwarded-Host": "attacker.example",
+      "X-Forwarded-Proto": "https",
+    },
+    { Origin: "http://site.example.test", "X-Forwarded-Proto": "http" },
+    { Origin: "https://sub.site.example.test", "Sec-Fetch-Site": "same-site" },
+    { Origin: "https://site.example.test:444" },
+    { Origin: "null" },
+    { Origin: "https://site.example.test/path" },
+    { Origin: externalOrigin, "Sec-Fetch-Site": "cross-site" },
+  ]) {
+    for (const [name, body] of [
+      ["login", credentials],
+      ["config", {}],
+      ["session", undefined],
+      ["logout", {}],
+    ]) {
+      const response = await request(name, body, {
+        origin,
+        cloudflareUrl: `${externalOrigin}/cms/${name}`,
+        headers,
+      });
+      assert.equal(
+        response.status,
+        403,
+        `${name} must reject ${JSON.stringify(headers)}`,
+      );
+    }
+  }
+  // Untrusted forwarding headers neither replace nor invalidate the original URL.
+  const valid = await request(
+    "config",
+    {},
+    {
+      origin,
+      cloudflareUrl: `${externalOrigin}/cms/config`,
+      headers: {
+        Origin: externalOrigin,
+        "X-Forwarded-Host": "attacker.example",
+        "X-Forwarded-Proto": "http",
+      },
+    },
+  );
+  assert.equal(valid.status, 200);
+});
+
+test("without a Cloudflare request the real request URL remains authoritative", async () => {
+  for (const headers of [
+    {
+      Origin: "https://attacker.example",
+      "X-Forwarded-Host": "attacker.example",
+      "X-Forwarded-Proto": "https",
+    },
+    { Origin: "http://site.example.test", "X-Forwarded-Proto": "http" },
+  ]) {
+    assert.equal(
+      (await request("login", credentials, { headers })).status,
+      403,
+    );
+  }
+  const origin = "http://localhost:3000";
+  const loggedIn = await request("login", credentials, {
+    origin,
+    cookie: "",
+    headers: { Origin: origin },
+  });
+  assert.equal(loggedIn.status, 200);
+  assert.ok(
+    !/; Secure(?:;|$)/i.test(
+      loggedIn.cookies.find((value) =>
+        value.startsWith("framecore-cms-session="),
+      ),
+    ),
+  );
+  assert.equal(
+    (
+      await request("login", credentials, {
+        origin,
+        cookie: "",
+        headers: { Origin: "http://localhost:3001" },
+      })
+    ).status,
+    403,
+  );
 });

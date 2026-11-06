@@ -10,7 +10,8 @@ import { checkLogin } from "./utils/check-login.js";
 import { verifyPassword } from "./utils/password.js";
 import { useDrizzle } from "../db.js";
 import { sql } from "drizzle-orm";
-import { requirePost, startCmsSession } from "./utils/session.js";
+import { startCmsSession } from "./utils/session.js";
+import { requirePost } from "./utils/request.js";
 
 const { users } = schema;
 

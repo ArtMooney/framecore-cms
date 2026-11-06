@@ -1,5 +1,6 @@
 import { defineEventHandler } from "nuxt/server";
-import { getCmsSession, requirePost } from "./utils/session.js";
+import { getCmsSession } from "./utils/session.js";
+import { requirePost } from "./utils/request.js";
 
 export default defineEventHandler(async (event) => {
   requirePost(event);

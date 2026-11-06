@@ -290,7 +290,10 @@ origin. The public site's `/cms/static` API keeps its existing Basic-auth contra
 Password reset links now expire after 30 minutes and work once. Outstanding
 links issued by older CMS versions must be requested again. The CMS generates
 reset links using the request's site origin and `/admin`; configure a reverse
-proxy to preserve the site's request URL if one is used.
+proxy to preserve the site's request URL if one is used. On Cloudflare, the CMS
+uses the original Worker request URL for origin checks, secure cookies and reset
+links, even when the server adapter reconstructs an internal HTTP URL. It does
+not trust client-supplied forwarded host or protocol headers.
 
 Tables with `backupRef` are archived automatically when selected, as before.
 The CMS now moves expired date-range rows through `POST /cms/archive-items`
