@@ -13,37 +13,15 @@
         :key="item.id ?? index"
         class="grid grid-cols-1 gap-2 rounded bg-black/25 p-4 shadow-[3px_4px_12px_rgba(0,0,0,0.22)] sm:grid-cols-2"
       >
-        <div class="flex flex-col gap-1 border-white/15 sm:border-r sm:pr-4">
-          <div class="text-xs text-white/50">
-            {{ formatDateValue(item[dateField]) }}
-          </div>
-          <div
-            class="font-heading text-lg wrap-break-word hyphens-auto"
-            lang="sv"
-          >
-            {{ item.title || item.name || "—" }}
-          </div>
-          <div v-if="item.time" class="text-sm text-white/70">
-            {{ item.time }}
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-1 text-sm text-white/80 sm:pl-4">
-          <div v-if="item.venue">
-            <span class="text-white/50">Venue:</span> {{ item.venue }}
-          </div>
-          <div v-if="item.company">
-            <span class="text-white/50">Company:</span> {{ item.company }}
-          </div>
-          <div v-if="item.name">
-            <span class="text-white/50">Name:</span> {{ item.name }}
-          </div>
-          <div v-if="item.phone">
-            <span class="text-white/50">Phone:</span> {{ item.phone }}
-          </div>
-          <div v-if="item.email">
-            <span class="text-white/50">Email:</span> {{ item.email }}
-          </div>
+        <div
+          v-for="field in cmsStore.visibleFields"
+          :key="field.name"
+          class="flex flex-col gap-1 text-sm text-white/80"
+        >
+          <span class="text-xs text-white/50">{{ field.label }}</span>
+          <span class="wrap-break-word whitespace-pre-wrap">{{
+            formatFieldValue(item[field.name], field.type) || "—"
+          }}</span>
         </div>
       </div>
 
@@ -90,7 +68,7 @@
 
 <script>
 import { useCmsStore } from "./stores/cmsStore.js";
-import { months } from "./lib/months.js";
+import { formatFieldValue } from "../utils/fieldFormatting.js";
 
 const PAGE_SIZE = 50;
 
@@ -158,38 +136,11 @@ export default {
   },
 
   methods: {
+    formatFieldValue,
+
     goToPage(page) {
       if (page < 1 || page > this.totalPages) return;
       this.currentPage = page;
-    },
-
-    formatDateValue(dateValue) {
-      if (!dateValue) return "—";
-
-      if (Array.isArray(dateValue)) {
-        const start = this.formatDate(dateValue[0]);
-        const end = this.formatDate(dateValue[1]);
-
-        if (!start) return "—";
-        if (!end || start === end) return start;
-
-        return `${start} – ${end}`;
-      }
-
-      return this.formatDate(dateValue) || "—";
-    },
-
-    formatDate(date) {
-      if (!date) return "";
-
-      const dateObj = new Date(date);
-      if (Number.isNaN(dateObj.getTime())) return "";
-
-      const day = dateObj.getDate();
-      const month = months[dateObj.getMonth()];
-      const year = dateObj.getFullYear();
-
-      return `${day} ${month} ${year}`;
     },
   },
 };

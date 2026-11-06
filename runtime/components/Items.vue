@@ -83,6 +83,7 @@ import { VueDraggableNext } from "vue-draggable-next";
     <template
       v-if="
         cmsStore.viewMode === 'graph' &&
+        graphConfig[cmsStore.tableId]?.length &&
         cmsStore.hasItems &&
         !cmsStore.loadingFlag
       "
@@ -150,10 +151,7 @@ export default {
     },
 
     graphDateField() {
-      const graphs = this.graphConfig[this.cmsStore.tableId] ?? [];
-      const selectors = graphs.find((graph) => graph?.type === "selectors");
-
-      return selectors?.dateField ?? graphs[0]?.dateField ?? "date";
+      return this.cmsStore.graphDateField;
     },
   },
 

@@ -3,6 +3,7 @@ import { useRuntimeConfig } from "#imports";
 import { defineStore } from "pinia";
 import { useLoginStore } from "./loginStore.js";
 import { months } from "../lib/months.js";
+import { formatFieldLabel } from "../../utils/fieldFormatting.js";
 
 export const useCmsStore = defineStore("framecore-cms:content", {
   state: () => ({
@@ -43,6 +44,21 @@ export const useCmsStore = defineStore("framecore-cms:content", {
       return this.schema.length > 0;
     },
 
+    visibleFields() {
+      return this.schema
+        .filter((field) => !field.hidden)
+        .map((field) => ({
+          ...field,
+          label: field.label || formatFieldLabel(field.name),
+        }));
+    },
+
+    graphDateField() {
+      const graphs = this.graphConfig[this.tableId] ?? [];
+      const selectors = graphs.find((graph) => graph?.type === "selectors");
+      return selectors?.dateField ?? graphs[0]?.dateField ?? "date";
+    },
+
     dateFields() {
       return this.allDateFields.filter((field) => !field.hidden);
     },
@@ -80,7 +96,7 @@ export const useCmsStore = defineStore("framecore-cms:content", {
           this.configLoaded = true;
         }
 
-        this.tables = await $fetch("/cms/tables", {
+        const tables = await $fetch("/cms/tables", {
           method: "POST",
           headers: {
             Authorization:
@@ -92,6 +108,10 @@ export const useCmsStore = defineStore("framecore-cms:content", {
             password: loginStore.password,
           },
         });
+        this.tables = tables.filter(
+          (table) =>
+            table.viewMode !== "graph" || this.graphConfig[table.id]?.length,
+        );
       } catch (err) {
         if (err.status === 401) {
           loginStore.logout();

@@ -6,10 +6,7 @@
 
         <select v-model="cmsStore.selectedYear">
           <option
-            v-for="(year, index) in [
-              '-',
-              ...cmsStore.selectorYears(graphSettings?.dateField),
-            ]"
+            v-for="(year, index) in ['-', ...cmsStore.selectorYears(dateField)]"
             :key="index"
             :value="year"
           >
@@ -68,17 +65,10 @@
 <script>
 import { useCmsStore } from "./stores/cmsStore.js";
 import { months } from "./lib/months.js";
-
-const CSV_COLUMNS = [
-  { key: "date", label: "Date" },
-  { key: "title", label: "Title" },
-  { key: "time", label: "Time" },
-  { key: "venue", label: "Venue" },
-  { key: "company", label: "Company" },
-  { key: "name", label: "Name" },
-  { key: "phone", label: "Phone" },
-  { key: "email", label: "Email" },
-];
+import {
+  formatFieldLabel,
+  formatFieldValue,
+} from "../utils/fieldFormatting.js";
 
 export default {
   name: "GraphSelectors",
@@ -107,7 +97,7 @@ export default {
     },
 
     dateField() {
-      return this.graphSettings?.dateField ?? "date";
+      return this.graphSettings?.dateField ?? this.cmsStore.graphDateField;
     },
 
     sortAsValue() {
@@ -120,7 +110,7 @@ export default {
         : [{ name: this.dateField, label: "Date" }];
 
       return fields.flatMap((field) => {
-        const label = field.label || this.formatFieldLabel(field.name);
+        const label = field.label || formatFieldLabel(field.name);
 
         return [
           { value: `${field.name}:asc`, label: `${label} (asc)` },
@@ -151,25 +141,18 @@ export default {
       await this.cmsStore.loadRows(order, field);
     },
 
-    formatFieldLabel(fieldName) {
-      return fieldName
-        .replace(/([a-z])([A-Z])/g, "$1 $2")
-        .replace(/^./, (char) => char.toUpperCase());
-    },
-
     exportCsv() {
       const items = this.cmsStore.filteredSelectItems(this.dateField);
-      const header = CSV_COLUMNS.map((col) => this.escapeCsv(col.label)).join(
-        ",",
-      );
+      const fields = this.cmsStore.visibleFields;
+      const header = fields
+        .map((field) => this.escapeCsv(field.label))
+        .join(",");
       const rows = items.map((item) =>
-        CSV_COLUMNS.map((col) => {
-          if (col.key === "date") {
-            return this.escapeCsv(this.formatDateValue(item[this.dateField]));
-          }
-
-          return this.escapeCsv(item[col.key] ?? "");
-        }).join(","),
+        fields
+          .map((field) =>
+            this.escapeCsv(formatFieldValue(item[field.name], field.type)),
+          )
+          .join(","),
       );
 
       const csv = `\uFEFF${[header, ...rows].join("\n")}`;
@@ -184,7 +167,7 @@ export default {
     },
 
     buildFileName() {
-      const parts = ["statistics"];
+      const parts = [this.cmsStore.tableId];
 
       if (this.cmsStore.selectedYear !== "-") {
         parts.push(String(this.cmsStore.selectedYear));
@@ -205,35 +188,6 @@ export default {
       }
 
       return stringValue;
-    },
-
-    formatDateValue(dateValue) {
-      if (!dateValue) return "";
-
-      if (Array.isArray(dateValue)) {
-        const start = this.formatDate(dateValue[0]);
-        const end = this.formatDate(dateValue[1]);
-
-        if (!start) return "";
-        if (!end || start === end) return start;
-
-        return `${start} – ${end}`;
-      }
-
-      return this.formatDate(dateValue) || "";
-    },
-
-    formatDate(date) {
-      if (!date) return "";
-
-      const dateObj = new Date(date);
-      if (Number.isNaN(dateObj.getTime())) return "";
-
-      const day = dateObj.getDate();
-      const month = months[dateObj.getMonth()];
-      const year = dateObj.getFullYear();
-
-      return `${day} ${month} ${year}`;
     },
   },
 

@@ -3,8 +3,11 @@ import { readFile, readdir } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import { after, before, beforeEach, test } from "node:test";
 import { createPinia, setActivePinia } from "pinia";
+import { compile, createSSRApp } from "vue";
+import { renderToString } from "vue/server-renderer";
 import { compileScript, compileTemplate, parse } from "vue/compiler-sfc";
 import { requiredFields } from "../runtime/utils/requiredFields.js";
+import { formatFieldValue } from "../runtime/utils/fieldFormatting.js";
 
 const fixtureKey = Symbol.for("framecore-cms.frontend-test");
 const fixture = {};
@@ -49,8 +52,10 @@ before(async () => {
 });
 
 beforeEach(() => {
-  setActivePinia(createPinia());
+  const pinia = createPinia();
+  setActivePinia(pinia);
   Object.assign(fixture, {
+    pinia,
     runtimeConfig: {
       public: {
         userName: "site",
@@ -61,6 +66,8 @@ beforeEach(() => {
     requests: [],
     reloads: 0,
     tables: [{ id: "products", name: "Products", viewMode: "list" }],
+    fields: [],
+    rows: [],
     metadata: {
       graphConfig: { products: [{ type: "bar", labelField: "name" }] },
       staticContentTypes: {
@@ -70,6 +77,8 @@ beforeEach(() => {
     respond(url) {
       if (url === "/cms/config") return structuredClone(this.metadata);
       if (url === "/cms/tables") return structuredClone(this.tables);
+      if (url === "/cms/fields") return structuredClone(this.fields);
+      if (url === "/cms/rows") return structuredClone(this.rows);
       throw new Error(`Unexpected request: ${url}`);
     },
   });
@@ -108,6 +117,47 @@ function bindMethods(options, properties) {
     instance[name] = method.bind(instance);
   }
   return instance;
+}
+
+async function loadSalesStatistics() {
+  fixture.tables = [{ id: "sales", name: "Sales", viewMode: "graph" }];
+  fixture.metadata.graphConfig = {
+    sales: [{ type: "selectors", dateField: "soldAt" }],
+  };
+  fixture.fields = [
+    { name: "id", type: "integer", hidden: true },
+    { name: "product", type: "text", label: "Produkt" },
+    { name: "amount", type: "integer", label: "Belopp" },
+    { name: "paid", type: "checkbox", label: "Betald" },
+    { name: "soldAt", type: "date", label: "Såld" },
+    { name: "period", type: "dateRange", label: "Period" },
+    { name: "details", type: "json", label: "Detaljer" },
+    { name: "orderStatus", type: "text" },
+    { name: "internalNote", type: "text", label: "Hemligt", hidden: true },
+  ];
+  fixture.rows = [
+    {
+      id: 1,
+      product: 'Widget, "A"\nNew',
+      amount: 0,
+      paid: false,
+      soldAt: "2026-01-12",
+      period: ["2026-01-12", "2026-01-14"],
+      details: { channel: "web" },
+      orderStatus: "pending",
+      internalNote: "Do not display or export",
+    },
+    { id: 2, product: "Other month", amount: 42, soldAt: "2026-02-01" },
+  ];
+  const store = useCmsStore();
+  await store.loadTables();
+  store.tableId = "sales";
+  store.viewMode = "graph";
+  await store.loadFields();
+  await store.loadRows("asc", "soldAt");
+  store.selectedYear = "2026";
+  store.selectedMonth = "January";
+  return store;
 }
 
 test("all runtime Vue files compile with their CMS components explicitly imported", async () => {
@@ -168,6 +218,169 @@ test("CMS metadata loads once while table loading keeps the existing authenticat
   );
   assert.deepEqual(store.tables, fixture.tables);
   assert.equal(store.loadingFlag, false);
+});
+
+test("statistics tables only appear when the site opts in with graph configuration", async () => {
+  const articles = { id: "articles", name: "Articles", viewMode: "list" };
+  const sales = { id: "sales", name: "Sales", viewMode: "graph" };
+  const archive = { id: "archive", name: "Archive", viewMode: "graph" };
+  fixture.tables = [articles, sales, archive];
+  fixture.metadata.graphConfig = {};
+  const store = useCmsStore();
+  await store.loadTables();
+  assert.deepEqual(store.tables, [articles]);
+
+  store.$reset();
+  fixture.metadata.graphConfig = {
+    sales: [{ type: "selectors" }],
+    archive: [],
+  };
+  await store.loadTables();
+  assert.deepEqual(store.tables, [articles, sales]);
+
+  store.$reset();
+  fixture.tables = [articles];
+  await store.loadTables();
+  assert.deepEqual(store.tables, [articles]);
+});
+
+test("statistics CSV uses site fields and labels, excludes hidden fields and preserves values", async (t) => {
+  const store = await loadSalesStatistics();
+  const options = await componentOptions("GraphSelectors");
+  const instance = bindMethods(options, {
+    cmsStore: store,
+    dateField: store.graphDateField,
+  });
+  let exportedBlob;
+  t.mock.method(URL, "createObjectURL", (blob) => {
+    exportedBlob = blob;
+    return "blob:test-export";
+  });
+  t.mock.method(URL, "revokeObjectURL", () => {});
+  let clicked = false;
+  const link = { click: () => (clicked = true) };
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: () => link };
+  try {
+    instance.exportCsv();
+    assert.equal(
+      await exportedBlob.text(),
+      "Produkt,Belopp,Betald,Såld,Period,Detaljer,Order Status\n" +
+        '"Widget, ""A""\nNew",0,false,12 January 2026,12 January 2026 – 14 January 2026,"{""channel"":""web""}",pending',
+    );
+    assert.deepEqual(
+      [...new Uint8Array(await exportedBlob.arrayBuffer()).slice(0, 3)],
+      [0xef, 0xbb, 0xbf],
+    );
+    assert.equal(link.download, "sales-2026-january.csv");
+    assert.equal(clicked, true);
+    assert.equal(URL.revokeObjectURL.mock.calls[0].arguments[0], link.href);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test("statistics list renders site fields with the same formatting and keeps pagination", async () => {
+  const store = await loadSalesStatistics();
+  const options = await componentOptions("GraphList");
+  const url = new URL("../runtime/components/GraphList.vue", import.meta.url);
+  const { descriptor } = parse(await readFile(url, "utf8"));
+  const app = createSSRApp(
+    { ...options, render: compile(descriptor.template.content) },
+    { dateField: store.graphDateField },
+  );
+  app.use(fixture.pinia);
+  const html = await renderToString(app);
+  for (const value of [
+    "Produkt",
+    "Belopp",
+    "Betald",
+    "Order Status",
+    "pending",
+  ]) {
+    assert(html.includes(value), value);
+  }
+  assert.match(html, />0<\/span>/);
+  assert.match(html, />false<\/span>/);
+  assert(html.includes("12 January 2026 – 14 January 2026"));
+  assert(html.includes("{&quot;channel&quot;:&quot;web&quot;}"));
+  for (const value of [
+    "Hemligt",
+    "Do not display or export",
+    "Venue:",
+    "Other month",
+  ]) {
+    assert(!html.includes(value), value);
+  }
+
+  store.items = Array.from({ length: 55 }, (_, index) => ({
+    id: index,
+    product: `Product ${index}`,
+    soldAt: "2026-01-12",
+  }));
+  const instance = bindMethods(options, {
+    items: store.filteredSelectItems(store.graphDateField),
+    currentPage: 1,
+    totalPages: 2,
+  });
+  assert.equal(options.computed.totalPages.call(instance), 2);
+  assert.equal(options.computed.pagedItems.call(instance).length, 50);
+  instance.goToPage(2);
+  assert.equal(options.computed.pagedItems.call(instance).length, 5);
+});
+
+test("switching statistics tables resets period filters and sorts by the configured date field", async () => {
+  const store = await loadSalesStatistics();
+  const options = await componentOptions("TableList");
+  const instance = bindMethods(options, { cmsStore: store, tableIndex: 0 });
+  store.sortOrder = "desc";
+  await instance.loadSchema();
+  assert.equal(store.selectedYear, "-");
+  assert.equal(store.selectedMonth, "-");
+  assert.equal(store.sortField, "soldAt");
+  assert.equal(store.sortOrder, "asc");
+  assert.equal(store.items.length, 2);
+  const rowsRequest = fixture.requests.findLast(
+    ({ url }) => url === "/cms/rows",
+  );
+  assert.equal(rowsRequest.options.body.field_name, "soldAt");
+
+  fixture.tables = [
+    { id: "statistics", name: "Statistics", viewMode: "graph" },
+  ];
+  fixture.metadata.graphConfig = {
+    statistics: [{ type: "selectors", dateField: "date" }],
+  };
+  fixture.fields = [
+    { name: "title", type: "text", label: "Title" },
+    { name: "venue", type: "text", label: "Venue" },
+    { name: "date", type: "dateRange", label: "Date" },
+  ];
+  store.configLoaded = false;
+  await store.loadTables();
+  await instance.loadSchema();
+  assert.equal(store.graphDateField, "date");
+  assert.equal(store.sortField, "date");
+  assert.deepEqual(
+    store.visibleFields.map(({ name }) => name),
+    ["title", "venue", "date"],
+  );
+});
+
+test("shared statistics formatting retains date ranges and handles empty or structured values", () => {
+  for (const [value, type, expected] of [
+    [null, "text", ""],
+    ["invalid", "date", ""],
+    [["2026-01-12", "2026-01-12"], "dateRange", "12 January 2026"],
+    [["2026-01-12", null], "dateRange", "12 January 2026"],
+    [[null, "2026-01-12"], "dateRange", ""],
+    [0, "integer", "0"],
+    [false, "checkbox", "false"],
+    [["one", "two"], "json", '["one","two"]'],
+  ]) {
+    assert.equal(formatFieldValue(value, type), expected);
+  }
 });
 
 test("failed metadata loading clears the loading state and can be retried", async (t) => {

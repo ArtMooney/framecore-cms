@@ -47,11 +47,22 @@ export default {
       this.cmsStore.tableId = table.id;
       this.cmsStore.viewMode = table.viewMode;
       this.cmsStore.backupRef = table.backupRef;
+      this.cmsStore.selectedYear = "-";
+      this.cmsStore.selectedMonth = "-";
+      this.cmsStore.sortOrder = "asc";
 
       await this.cmsStore.loadFields();
+      const dateField =
+        this.cmsStore.allDateFields.find(
+          (field) => field.name === this.cmsStore.graphDateField,
+        ) ?? this.cmsStore.allDateFields[0];
+      this.cmsStore.sortField = dateField?.name ?? "sortOrder";
       this.cmsStore.loadingFlag = true;
       await this.backupReferencedTable(table);
-      await this.cmsStore.loadRows("asc", "sortOrder");
+      await this.cmsStore.loadRows(
+        "asc",
+        table.viewMode === "graph" ? this.cmsStore.sortField : "sortOrder",
+      );
     },
 
     async backupReferencedTable(table) {

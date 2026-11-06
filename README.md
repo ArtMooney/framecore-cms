@@ -96,6 +96,39 @@ To keep an existing config path, set
 The module reserves `/admin` and `/cms/*`; remove local copies of those routes.
 The admin uses its own layout and sends `noindex, nofollow`.
 
+## Statistics (optional)
+
+Statistics is enabled per site and per table. Add a table to `cmsTables` with
+`viewMode: "graph"` and define its views under the same key in `graphConfig`:
+
+```ts
+// In the site's server/cms.config.ts, for an existing schema.sales table:
+export const cmsTables = [{ id: "sales", name: "Sales", viewMode: "graph" }];
+
+export const graphConfig = {
+  sales: [
+    { type: "selectors", dateField: "soldAt" },
+    {
+      type: "bar",
+      labelField: "product",
+      dateField: "soldAt",
+      datasets: [{ label: "Records per product" }],
+    },
+  ],
+};
+```
+
+Define the table's fields in `fieldsConfig` as usual. The statistics list and
+CSV export use those same visible fields, labels and order as the editing form.
+Fields with `hidden: true` are excluded. Dates and date ranges are formatted
+consistently in both views; CSV filenames use the selected table's ID.
+No booking-specific field names or table named `statistics` are required.
+
+For a site without statistics, keep its content tables in `viewMode: "list"`
+and export `graphConfig = {}`. A graph table is hidden from the table selector
+when its matching `graphConfig` entry is missing or empty. No statistics table
+or view is added automatically by the module.
+
 ## Site fonts (optional)
 
 The CMS does not bundle fonts or choose font families. It reads the site's
