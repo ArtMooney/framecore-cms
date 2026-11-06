@@ -5,6 +5,8 @@ integration instructions.
 
 ## Unreleased
 
+## 0.3.0 - 2026-11-06
+
 ### Fixed
 
 - Password reset tokens require an exact match, expire after 30 minutes and
