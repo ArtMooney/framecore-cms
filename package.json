@@ -17,17 +17,17 @@
     "module.mjs",
     "module.d.mts",
     "runtime",
-    "NOTICE.md"
+    "NOTICE.md",
+    "tailwind.config.js"
   ],
   "scripts": {
-    "build:css": "node scripts/build-css.mjs",
     "test": "node --test test/*.test.mjs",
-    "format": "prettier --write . --ignore-path .gitignore",
-    "prepack": "npm run build:css"
+    "format": "prettier --write . --ignore-path .gitignore"
   },
   "dependencies": {
     "@nuxt/kit": "^4.5.2",
     "@pinia/nuxt": "^1.0.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@vuepic/vue-datepicker": "^14.0.0",
     "chart.js": "^4.5.1",
     "date-fns": "^4.4.0",
@@ -36,6 +36,7 @@
     "ofetch": "^1.5.1",
     "pinia": "^4.0.2",
     "pinia-plugin-persistedstate": "^4.7.1",
+    "tailwindcss": "^4.3.3",
     "vue-chartjs": "^5.3.4",
     "vue-draggable-next": "^2.3.0"
   },
@@ -46,14 +47,10 @@
   },
   "devDependencies": {
     "@tailwindcss/node": "^4.3.3",
-    "@tailwindcss/oxide": "^4.3.3",
-    "lightningcss": "^1.32.0",
     "nuxt": "^4.5.2",
     "postcss": "^8.5.26",
-    "postcss-selector-parser": "^7.1.4",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "tailwindcss": "^4.3.3",
     "vue": "^3.5.41"
   }
 }

@@ -2,8 +2,10 @@
 
 A Nuxt 4 module for Cloudflare D1 + R2. It includes `/admin`, the `/cms/*` API,
 login/password reset, configurable fields, file uploads, charts and CSV export.
-The CMS owns its styling; the host needs no CMS Tailwind config, icon plugin or
-image provider.
+The CMS owns its Tailwind configuration and styles. The module connects Tailwind
+to the site's Vite build automatically, reusing an existing Tailwind plugin when
+present. The host needs no copied CMS styles, icon plugin or image provider.
+To match the site's heading and body fonts, see [Site fonts](#site-fonts-optional).
 
 ## Use in a site
 
@@ -70,6 +72,39 @@ To keep an existing config path, set
 The module reserves `/admin` and `/cms/*`; remove local copies of those routes.
 The admin uses its own layout and sends `noindex, nofollow`.
 
+## Site fonts (optional)
+
+The CMS does not bundle fonts or choose font families. It reads the site's
+`--font-body` and `--font-heading` CSS variables. Font files and font names
+stay in the consuming site.
+
+**If the variables already exist globally**, no CSS changes are needed.
+This also applies to CSS-first Tailwind themes that already expose both values.
+
+**For a JavaScript Tailwind config**, add the following block to the site's
+existing main CSS file, after its `@config` directive, to use the same heading
+and body fonts in the CMS:
+
+```css
+/* After the site's existing @config directive. */
+:root {
+  --font-body: theme(--font-body);
+  --font-heading: theme(--font-heading);
+}
+```
+
+This is a site-side integration step when matching both fonts. `theme(...)`
+resolves `theme.fontFamily.body` and `theme.fontFamily.heading` from that site's
+Tailwind config at build time. Keep the existing font imports and `@font-face`
+rules. Do not repeat the font names in the CMS config.
+
+For example, Boråssajten adds this block in `app/assets/css/main.css`, while its
+font names remain in `tailwind.config.js`.
+
+**Without this setup**, the CMS still works and inherits the surrounding body
+font. If only `--font-body` exists, headings fall back to that font. Plain CSS
+inheritance does not read Tailwind's separate `heading` and `body` config keys.
+
 ## Environment
 
 Configure these per site (declare no extra runtime keys; the module adds them):
@@ -121,22 +156,22 @@ Edit the shared code in this repository and verify it in the consuming site's
 Restart the site's dev server after changing the module registration in
 `module.mjs`. Verify affected sites before releasing a shared update.
 
-Edit `styles/cms.css` for the CMS theme and base styles, then run this command
-in the CMS repository:
+Edit `tailwind.config.js` for the CMS theme and base styles. `runtime/cms.css`
+loads that config, registers the CMS component sources and imports Tailwind
+and the datepicker stylesheet. The consuming site's normal Vite build compiles
+them, including during development. There is no separate CSS build command or
+generated CSS file to commit.
 
-```sh
-npm run build:css
-```
-
-This compiles Tailwind utilities and datepicker styles into `runtime/cms.css`,
-with every selector scoped to `.cms-admin` and separate CSS variable/animation
-names. Rebuild after changing styles or adding utility classes to components.
-Commit the generated CSS so Git installs work without a CSS build at the host.
+CMS components use normal Tailwind utility classes such as `h-auto` and `flex`.
+The stylesheet generates those utilities under `.cms-admin`, alongside the
+scoped base and form styles. Theme values are compiled inline so the CMS does
+not replace the host's theme variables. Tailwind's global Preflight reset is
+omitted. The datepicker uses its standard `dp-` classes and stylesheet.
 
 ## Versions
 
-All shared code lives in this repository. Bump `package.json`, rebuild the CSS,
-run the tests and verify the consuming sites, then commit and tag the release. Consumers can install
+All shared code lives in this repository. Bump `package.json`, run the tests
+and verify the consuming sites, then commit and tag the release. Consumers can install
 `github:ArtMooney/framecore-cms#v0.2.0` once that tag has been pushed. Pin a tag
 or commit for deployed sites. Each site updates the dependency and redeploys
 when it wants the new version. There is no npm publication requirement.

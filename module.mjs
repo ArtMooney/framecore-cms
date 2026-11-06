@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import {
   addServerHandler,
   createResolver,
@@ -33,6 +34,13 @@ export default defineNuxtModule({
     nuxt.options.nitro.alias["#framecore-cms/config"] = configFile;
     nuxt.options.build.transpile.push(resolve("./runtime"));
     nuxt.options.css.push(resolve("./runtime/cms.css"));
+    nuxt.hook("vite:extend", ({ config }) => {
+      config.plugins ||= [];
+      const hasTailwind = config.plugins
+        .flat(Infinity)
+        .some((plugin) => plugin?.name?.startsWith("@tailwindcss/vite"));
+      if (!hasTailwind) config.plugins.push(...tailwindcss());
+    });
 
     if (!hasNuxtModule("@pinia/nuxt", nuxt) && !hasNuxtModule("pinia", nuxt)) {
       await installModule(fileURLToPath(import.meta.resolve("@pinia/nuxt")));
