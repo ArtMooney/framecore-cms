@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import {
   addServerHandler,
+  addTemplate,
   createResolver,
   defineNuxtModule,
   extendPages,
@@ -34,6 +35,15 @@ export default defineNuxtModule({
     nuxt.options.nitro.alias["#framecore-cms/config"] = configFile;
     nuxt.options.build.transpile.push(resolve("./runtime"));
     nuxt.options.css.push(resolve("./runtime/cms.css"));
+    const imageTemplate = addTemplate({
+      filename: "framecore-cms-image.mjs",
+      getContents: () =>
+        hasNuxtModule("@nuxt/image", nuxt)
+          ? 'export { useImage as useCmsImage } from "#imports";'
+          : "export const useCmsImage = () => null;",
+    });
+    nuxt.options.alias ||= {};
+    nuxt.options.alias["#framecore-cms/image"] = imageTemplate.dst;
     nuxt.hook("vite:extend", ({ config }) => {
       config.plugins ||= [];
       const hasTailwind = config.plugins

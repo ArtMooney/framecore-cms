@@ -1,6 +1,6 @@
 {
   "name": "framecore-cms",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "A self-contained Nuxt CMS module with its own styling and Cloudflare D1/R2 backend.",
   "engines": {

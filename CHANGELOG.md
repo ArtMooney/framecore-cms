@@ -5,6 +5,15 @@ integration instructions.
 
 ## Unreleased
 
+## 0.3.2 - 2026-11-09
+
+### Fixed
+
+- Stored-image previews reuse the site's Nuxt Image provider for 80px WebP
+  renditions when available, keeping direct image URLs as a fallback. Previews
+  load lazily, including in collapsed rows. Uploads and original files are
+  unchanged, and Nuxt Image remains optional.
+
 ## 0.3.1 - 2026-11-06
 
 ### Fixed

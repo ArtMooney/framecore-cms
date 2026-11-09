@@ -16,6 +16,8 @@ const fixtureSource = `const fixture = globalThis[Symbol.for("framecore-cms.fron
 const sources = {
   "#imports": `${fixtureSource}
     export const useRuntimeConfig = () => fixture.runtimeConfig;`,
+  "#framecore-cms/image": `${fixtureSource}
+    export const useCmsImage = () => fixture.previewImage;`,
   ofetch: `${fixtureSource}
     export const $fetch = async (url, options) => {
       fixture.requests.push({ url, options });
@@ -65,6 +67,7 @@ beforeEach(() => {
     },
     requests: [],
     reloads: 0,
+    previewImage: null,
     tables: [{ id: "products", name: "Products", viewMode: "list" }],
     fields: [],
     rows: [],
@@ -534,6 +537,55 @@ test("image previews use the configured file origin without needing Nuxt Image",
   );
   instance.imageBaseUrl = "";
   assert.equal(instance.fileUrl("hero.png"), "/cms-files/hero.png");
+});
+
+test("stored image previews use the host image optimizer without changing file data", async () => {
+  const requests = [];
+  fixture.previewImage = (url, modifiers) => {
+    requests.push({ url, modifiers });
+    return "https://images.example.test/hero-80.webp";
+  };
+  const options = await componentOptions("Inputs");
+  const item = { photo: "hero.png" };
+  const instance = bindMethods(options, { ...options.data(), item });
+  assert.equal(
+    instance.fileUrl(item.photo),
+    "https://images.example.test/hero-80.webp",
+  );
+  assert.deepEqual(requests, [
+    {
+      url: "https://files.example.test/cms-files/hero.png",
+      modifiers: { width: 80, format: "webp" },
+    },
+  ]);
+  assert.deepEqual(item, { photo: "hero.png" });
+});
+
+test("stored image previews render lazily with stable dimensions", async () => {
+  const options = await componentOptions("Inputs");
+  const url = new URL("../runtime/components/Inputs.vue", import.meta.url);
+  const { descriptor } = parse(await readFile(url, "utf8"));
+  const app = createSSRApp(
+    {
+      ...options,
+      components: {
+        VueDatePicker: { render: () => null },
+        IconCloseCircleOutline: { render: () => null },
+      },
+      render: compile(descriptor.template.content),
+    },
+    {
+      input: { name: "photo", type: "fileImg" },
+      item: { photo: "hero.png" },
+      index: 0,
+    },
+  );
+  const html = await renderToString(app);
+  assert.match(
+    html,
+    /<img[^>]*src="https:\/\/files\.example\.test\/cms-files\/hero\.png"/,
+  );
+  assert.match(html, /<img[^>]*width="80"[^>]*height="80"[^>]*loading="lazy"/);
 });
 
 test("the home control returns to the current site's origin including its port", async () => {

@@ -82,6 +82,9 @@ import IconCloseCircleOutline from "./icons/IconCloseCircleOutline.vue";
             typeof item[input?.name] === 'string'
           "
           :src="fileUrl(item[input.name])"
+          width="80"
+          height="80"
+          loading="lazy"
           alt="an image slot with an image selected by the user"
           class="h-20 min-h-20 w-20 min-w-20 object-cover"
         />
@@ -109,6 +112,7 @@ import IconCloseCircleOutline from "./icons/IconCloseCircleOutline.vue";
 
 <script>
 import { useRuntimeConfig } from "#imports";
+import { useCmsImage } from "#framecore-cms/image";
 
 export default {
   name: "Inputs",
@@ -147,12 +151,16 @@ export default {
     return {
       isCloseIcon: false,
       imageBaseUrl: useRuntimeConfig().public.imageBaseUrl || "",
+      previewImage: useCmsImage(),
     };
   },
 
   methods: {
     fileUrl(filename) {
-      return `${this.imageBaseUrl.replace(/\/$/, "")}/cms-files/${filename}`;
+      const url = `${this.imageBaseUrl.replace(/\/$/, "")}/cms-files/${filename}`;
+      return this.previewImage
+        ? this.previewImage(url, { width: 80, format: "webp" })
+        : url;
     },
 
     async handleFileInput(event, name, item) {

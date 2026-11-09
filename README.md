@@ -245,6 +245,11 @@ Image preview URLs use `<NUXT_PUBLIC_IMAGE_BASE_URL>/cms-files/<filename>`.
 If the base URL is omitted, the site must serve those files at
 `/cms-files/<filename>` on its own origin.
 
+When the site enables `@nuxt/image`, stored-image previews reuse its configured
+provider to request 80px WebP renditions. Without Nuxt Image, previews use the
+original file URL. Both paths load images lazily. Uploads and stored original
+files are unchanged; the CMS adds no required image dependency or provider.
+
 Example for the **site's** `.env`, using placeholder values:
 
 ```dotenv
