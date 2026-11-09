@@ -5,6 +5,13 @@ integration instructions.
 
 ## Unreleased
 
+## 0.3.3 - 2026-11-09
+
+### Fixed
+
+- The optional Nuxt Image adapter uses an import that Nuxt can transform,
+  preventing the `#imports` warning when opening `/admin` in development.
+
 ## 0.3.2 - 2026-11-09
 
 ### Fixed

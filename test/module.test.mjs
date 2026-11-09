@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
+import { createUnimport } from "unimport";
 
 const fixtureKey = Symbol.for("framecore-cms.module-test");
 const fixture = { modules: new Set(), templates: [] };
@@ -30,7 +31,7 @@ const hooks = registerHooks({
         shortCircuit: true,
       };
     }
-    if (specifier === "#imports") {
+    if (specifier === "#test-image") {
       return {
         url: 'data:text/javascript,export const useImage = () => "host-image-optimizer";',
         shortCircuit: true,
@@ -106,8 +107,18 @@ test("image previews use Nuxt Image regardless of module registration order", as
       registeredBeforeSetup ? ["@nuxt/image"] : [],
     );
     fixture.modules.add("@nuxt/image");
+    const imports = createUnimport({
+      parser: "oxc",
+      virtualImports: ["#imports"],
+      imports: [{ name: "useImage", from: "#test-image" }],
+    });
+    const { code } = await imports.injectImports(
+      imageTemplate.getContents(),
+      imageTemplate.dst,
+    );
+    assert.doesNotMatch(code, /["']#imports["']/);
     const adapter = await import(
-      `data:text/javascript,${encodeURIComponent(imageTemplate.getContents())}`
+      `data:text/javascript,${encodeURIComponent(code)}`
     );
     assert.equal(adapter.useCmsImage(), "host-image-optimizer");
   }

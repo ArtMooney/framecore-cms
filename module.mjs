@@ -39,7 +39,7 @@ export default defineNuxtModule({
       filename: "framecore-cms-image.mjs",
       getContents: () =>
         hasNuxtModule("@nuxt/image", nuxt)
-          ? 'export { useImage as useCmsImage } from "#imports";'
+          ? 'import { useImage } from "#imports"; export { useImage as useCmsImage };'
           : "export const useCmsImage = () => null;",
     });
     nuxt.options.alias ||= {};
